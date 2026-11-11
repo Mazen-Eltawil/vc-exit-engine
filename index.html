@@ -1,0 +1,1517 @@
+<title>VC Exit Engine</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@1,500;1,600&display=swap">
+<style>
+/* Layout: a term-sheet ledger. Inputs read like a term sheet on the left; the verdict ticket stays pinned on the right. */
+:root {
+  --paper: #f2f4f1; --card: #fcfdfb; --sunk: #eef1ed; --ink: #13201a; --ink-2: #46544c; --muted: #737f78;
+  --rule: #d8ded9; --rule-2: #b8c2bb; --accent: #1d6a55; --accent-ink: #ffffff; --accent-wash: #e1ede7; --focus: #2a78d6;
+  --v-sell: #17604c; --v-sell-wash: #d9eae2; --v-part: #255f80; --v-part-wash: #dde9f1; --v-wait: #7c5100; --v-wait-wash: #f4e8cf;
+  --v-hold: #3f4c55; --v-hold-wash: #e5e9ec; --v-stuck: #5f4483; --v-stuck-wash: #e9e3f1; --warn: #8f4a00; --crit: #b23131;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --grid: #e2e6e2; --axis: #bfc7c1;
+  --z-hold: #cfd6db; --z-part: #a8c9de; --z-sell: #8cc7b0;
+  --f-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --f-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1311; --card: #151b18; --sunk: #1b221f; --ink: #e6ede8; --ink-2: #b3c0b8; --muted: #84918a;
+    --rule: #26302b; --rule-2: #3a4740; --accent: #52b392; --accent-ink: #0b1712; --accent-wash: #1a2e26; --focus: #5598e7;
+    --v-sell: #6cc6a4; --v-sell-wash: #173229; --v-part: #79b6dc; --v-part-wash: #172a36; --v-wait: #e2b45a; --v-wait-wash: #2f2510;
+    --v-hold: #b5c2cb; --v-hold-wash: #20282d; --v-stuck: #b9a2dc; --v-stuck-wash: #261f33; --warn: #e5a25a; --crit: #ec7272;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --grid: #242c28; --axis: #3a4540;
+    --z-hold: #333d43; --z-part: #23506b; --z-sell: #1f5c47;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1311; --card: #151b18; --sunk: #1b221f; --ink: #e6ede8; --ink-2: #b3c0b8; --muted: #84918a;
+  --rule: #26302b; --rule-2: #3a4740; --accent: #52b392; --accent-ink: #0b1712; --accent-wash: #1a2e26; --focus: #5598e7;
+  --v-sell: #6cc6a4; --v-sell-wash: #173229; --v-part: #79b6dc; --v-part-wash: #172a36; --v-wait: #e2b45a; --v-wait-wash: #2f2510;
+  --v-hold: #b5c2cb; --v-hold-wash: #20282d; --v-stuck: #b9a2dc; --v-stuck-wash: #261f33; --warn: #e5a25a; --crit: #ec7272;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --grid: #242c28; --axis: #3a4540;
+  --z-hold: #333d43; --z-part: #23506b; --z-sell: #1f5c47;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--f-sans); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: 26px; line-height: 1.2; }
+h2 { font-size: 16px; }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num, td.n, .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--card); border-bottom: 1px solid var(--rule); }
+.bar-in, main { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-in { display: flex; align-items: center; gap: 20px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.seal { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--accent); box-shadow: inset 0 0 0 3px var(--card), inset 0 0 0 4.5px var(--accent); flex: none; }
+.brand .name { font-weight: 600; font-size: 15px; letter-spacing: 0.01em; }
+.brand .tag { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { background: none; border: 0; padding: 8px 12px; border-radius: 6px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); background: var(--sunk); font-weight: 500; }
+.tabs button:hover { color: var(--ink); }
+.store { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.store::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--rule-2); }
+.store[data-s="live"]::before { background: var(--accent); }
+.store[data-s="saving"]::before { background: var(--v-wait); }
+.store[data-s="error"]::before { background: var(--crit); }
+
+main { padding-block: 24px 64px; }
+.view { display: grid; gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.lede { color: var(--ink-2); max-width: 68ch; margin-top: 6px; }
+.hint, small { color: var(--muted); font-size: 12px; }
+.head-row { display: flex; gap: 16px; align-items: end; justify-content: space-between; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn, button.primary, button.ghost, button.plain { border-radius: 7px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--rule-2); background: var(--card); font-weight: 500; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.ghost { background: none; border-color: transparent; color: var(--ink-2); }
+button.ghost:hover, button.plain:hover { background: var(--sunk); }
+button.danger { color: var(--crit); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.icon { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.icon:hover { color: var(--crit); background: var(--sunk); }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+.tile .lab { font-size: 12px; color: var(--muted); }
+.tile .val { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.tile .sub { font-size: 12px; color: var(--ink-2); }
+
+.tbl-wrap { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; }
+th { font-weight: 500; font-size: 12px; color: var(--muted); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+th.n, td.n { text-align: right; }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--sunk); }
+tbody tr:last-child td { border-bottom: 0; }
+.co { font-weight: 500; }
+.co small { display: block; font-weight: 400; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.v-sell { color: var(--v-sell); background: var(--v-sell-wash); }
+.v-part { color: var(--v-part); background: var(--v-part-wash); }
+.v-wait { color: var(--v-wait); background: var(--v-wait-wash); }
+.v-hold { color: var(--v-hold); background: var(--v-hold-wash); }
+.v-stuck { color: var(--v-stuck); background: var(--v-stuck-wash); }
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--sunk); color: var(--ink-2); white-space: nowrap; }
+.chip.ex { background: var(--v-wait-wash); color: var(--v-wait); }
+.chip.warn { color: var(--warn); font-weight: 600; }
+
+.empty { padding: 28px 8px; text-align: center; color: var(--ink-2); display: grid; gap: 8px; justify-items: center; }
+.empty strong { color: var(--ink); font-size: 15px; }
+
+.planner .row, .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.planner .in { max-width: 220px; }
+
+/* position view */
+.pos-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pos-head select { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--rule-2); background: var(--card); max-width: 100%; font-weight: 500; }
+.spacer { flex: 1; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1100px) { .split { grid-template-columns: minmax(0, 470px) minmax(0, 1fr); } .results { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; padding-right: 4px; scrollbar-width: thin; } }
+.inputs, .results { display: grid; gap: 16px; min-width: 0; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px 14px; }
+.fld { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.fld > span:first-child { font-size: 12px; color: var(--ink-2); }
+.fld.chk { grid-template-columns: auto 1fr; align-items: start; column-gap: 8px; }
+.fld.chk span { font-size: 13px; color: var(--ink); }
+.fld.chk small { grid-column: 2; }
+.fld.chk input { margin-top: 3px; }
+.in { display: flex; align-items: center; border: 1px solid var(--rule-2); border-radius: 7px; background: var(--card); overflow: hidden; }
+.in:focus-within { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+.in i { font-style: normal; color: var(--muted); padding: 0 8px; font-size: 12px; }
+.in input { border: 0; background: none; padding: 7px 9px; width: 100%; min-width: 0; font-family: var(--f-mono); font-size: 13px; outline: none; }
+.in.money input { padding-left: 0; }
+.in.text input, .in.date input { font-family: var(--f-sans); font-size: 14px; }
+[aria-invalid="true"] { color: var(--crit); }
+.in:has([aria-invalid="true"]) { border-color: var(--crit); }
+select { padding: 7px 9px; border-radius: 7px; border: 1px solid var(--rule-2); background: var(--card); }
+textarea { width: 100%; border: 1px solid var(--rule-2); border-radius: 7px; background: var(--card); padding: 8px 10px; resize: vertical; font-size: 13px; }
+details > summary { cursor: pointer; color: var(--ink-2); font-size: 13px; list-style: none; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 12px; }
+details[open] > summary::before { content: "−"; }
+details[open] > summary { margin-bottom: 12px; }
+.card > details { border-top: 1px solid var(--rule); padding-top: 12px; }
+.import summary span { font-weight: 600; color: var(--ink); font-size: 16px; }
+
+table.cap td, table.cap th { padding: 4px; border-bottom: 0; }
+table.cap input[type="text"] { width: 100%; min-width: 64px; border: 1px solid var(--rule-2); border-radius: 6px; padding: 6px 7px; background: var(--card); font-family: var(--f-mono); font-size: 12.5px; }
+table.cap td:first-child input { min-width: 120px; font-family: var(--f-sans); }
+table.cap select { padding: 6px; font-size: 12.5px; }
+table.cap td.c { text-align: center; }
+.bids { display: grid; gap: 8px; }
+.bid { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(110px, 2fr) minmax(130px, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 520px) { .bid { grid-template-columns: 1fr 1fr auto; } .bid .bid-src { grid-column: 1 / -1; grid-row: 2; } }
+
+.drop { border: 1.5px dashed var(--rule-2); border-radius: 10px; padding: 18px; text-align: center; display: grid; gap: 6px; background: var(--sunk); }
+.drop.over { border-color: var(--accent); background: var(--accent-wash); }
+.drop input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.linklike { color: var(--accent); text-decoration: underline; cursor: pointer; }
+.files { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.review { display: grid; gap: 8px; }
+.rv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; }
+.rv input { margin-top: 3px; }
+.rv .q { grid-column: 2; font-size: 12px; color: var(--muted); font-style: italic; }
+.rv .vv { font-family: var(--f-mono); font-size: 13px; }
+
+/* results */
+.ticket { position: relative; padding: 22px; gap: 16px; border-color: var(--rule-2); }
+.ticket::after { content: ""; position: absolute; inset: 5px; border: 1px solid var(--rule); border-radius: 7px; pointer-events: none; }
+.ticket > * { position: relative; z-index: 1; }
+.t-top { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.t-co { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.verdict { font-family: var(--f-serif); font-style: italic; font-weight: 600; font-size: 44px; line-height: 1.05; letter-spacing: -0.01em; }
+.verdict.v-sell, .verdict.v-part, .verdict.v-wait, .verdict.v-hold, .verdict.v-stuck { background: none; }
+.why { font-size: 15px; color: var(--ink-2); max-width: 64ch; }
+@media (max-width: 520px) { .verdict { font-size: 34px; } .ticket { padding: 18px; } h1 { font-size: 22px; } }
+.sr { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: center; }
+.sr .big { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
+.sr .lab { font-size: 12px; color: var(--muted); }
+.meter { position: relative; height: 48px; }
+.meter .trk { position: absolute; left: 0; right: 0; top: 13px; height: 8px; border-radius: 4px; background: var(--sunk); }
+.meter .band { position: absolute; top: 13px; height: 8px; border-radius: 4px; background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent); opacity: 0.9; }
+.meter .one { position: absolute; top: 6px; width: 1.5px; height: 22px; background: var(--ink-2); }
+.meter .pt { position: absolute; top: 10px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card); }
+.meter .mk { position: absolute; top: 26px; font-size: 10.5px; color: var(--muted); transform: translateX(-50%); white-space: nowrap; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+.facts b { color: var(--ink); font-weight: 600; }
+
+.ladder { display: grid; gap: 8px; }
+.lad { position: relative; height: 64px; margin: 0 8px; }
+.lad .z { position: absolute; top: 22px; height: 12px; }
+.lad .z0 { background: var(--z-hold); border-radius: 6px 0 0 6px; }
+.lad .z1 { background: var(--z-part); }
+.lad .z2 { background: var(--z-sell); border-radius: 0 6px 6px 0; }
+.lad .tick { position: absolute; top: 16px; width: 1.5px; height: 24px; background: var(--ink-2); }
+.lad .tl { position: absolute; top: 42px; transform: translateX(-50%); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; text-align: center; line-height: 1.25; }
+.lad .bidm { position: absolute; top: 0; transform: translateX(-50%); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.lad .bidm::after { content: ""; position: absolute; left: 50%; top: 17px; margin-left: -5px; border: 5px solid transparent; border-top-color: var(--ink); }
+.zl { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+.zl span { display: inline-flex; align-items: center; gap: 6px; }
+.zl i { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.stat { padding: 12px 14px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); display: grid; gap: 1px; align-content: start; }
+.stat .lab { font-size: 12px; color: var(--muted); }
+.stat .val { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.stat .sub { font-size: 12px; color: var(--ink-2); }
+
+.chart { position: relative; min-width: 0; }
+.chart svg { display: block; overflow: visible; }
+.chart .gl { stroke: var(--grid); stroke-width: 1; }
+.chart .base { stroke: var(--axis); stroke-width: 1; }
+.chart text { font-family: var(--f-sans); }
+.chart .tk { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .lbl { font-size: 11.5px; fill: var(--ink-2); }
+.chart .lbl-b { font-size: 11.5px; fill: var(--ink); font-weight: 600; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.chart .hit:hover { fill: var(--ink); fill-opacity: 0.04; }
+.tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--rule-2); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.12); min-width: 150px; z-index: 3; display: grid; gap: 3px; }
+.tip .tt { font-weight: 600; margin-bottom: 2px; }
+.tip .tr { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-2); }
+.tip .tr b { color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); }
+.ch-head { display: grid; gap: 4px; }
+.mix td { padding: 6px 8px; font-size: 13px; }
+
+.bridge { display: grid; gap: 8px; }
+.br { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 13px; }
+.br .bl small { display: block; }
+.br .bb { height: 10px; background: var(--sunk); border-radius: 0 5px 5px 0; overflow: hidden; }
+.br .bb i { display: block; height: 100%; background: var(--rule-2); border-radius: 0 5px 5px 0; }
+.br.final .bb i { background: var(--accent); }
+.br.final { font-weight: 600; border-top: 1px solid var(--rule); padding-top: 8px; }
+@media (max-width: 560px) { .br { grid-template-columns: 1fr auto; } .br .bb { grid-column: 1 / -1; grid-row: 2; } }
+
+.notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink-2); font-size: 13px; }
+.memo { white-space: pre-wrap; font-size: 14px; line-height: 1.6; background: var(--sunk); border-radius: 8px; padding: 14px 16px; max-height: 520px; overflow: auto; }
+.skeleton { color: var(--muted); display: grid; gap: 10px; }
+.skeleton .ln { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--sunk), var(--rule), var(--sunk)); background-size: 200% 100%; animation: sh 1.4s linear infinite; }
+@keyframes sh { to { background-position: -200% 0; } }
+.prog { height: 4px; border-radius: 2px; background: var(--sunk); overflow: hidden; }
+.prog i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+
+.method { max-width: 860px; }
+.method article { display: grid; gap: 14px; }
+.method p, .method li { color: var(--ink-2); max-width: 72ch; }
+.method h2 { font-size: 18px; margin-top: 10px; }
+.method .eq { font-family: var(--f-mono); font-size: 12.5px; background: var(--sunk); padding: 10px 12px; border-radius: 8px; overflow-x: auto; white-space: pre; color: var(--ink); }
+.method ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.method td, .method th { font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand"><span class="seal" aria-hidden="true"></span><div><div class="name">VC Exit Engine</div><div class="tag">Hold-or-sell decisions for private venture stakes</div></div></div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" data-view="portfolio" aria-selected="true">Portfolio</button>
+      <button role="tab" data-view="position" aria-selected="false">Position</button>
+      <button role="tab" data-view="family" aria-selected="false">Family settings</button>
+      <button role="tab" data-view="method" aria-selected="false">Method</button>
+    </nav>
+    <div class="store" id="store" role="status">Connecting</div>
+  </div>
+</header>
+
+<main>
+  <section class="view" id="v-portfolio">
+    <div class="head-row">
+      <div>
+        <h1>Which stakes to sell, how much, and at what price</h1>
+        <p class="lede">Each position runs through a Monte Carlo simulation of the company, its cap table and the secondary market. Two tests decide: does the bid beat holding at your hurdle rate, and is the stake too big for the family's risk.</p>
+      </div>
+      <div class="actions">
+        <button class="plain" id="btn-runall">Rerun all</button>
+        <button class="primary" id="btn-add">Add position</button>
+      </div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div class="card">
+      <div class="tbl-wrap"><table id="ptable"></table></div>
+      <div class="empty" id="pempty"><strong>Loading the family's positions</strong><span>Positions saved by anyone on the team appear here, each with a verdict, a sale size and a price ladder.</span></div>
+    </div>
+    <div class="card" id="focus" hidden></div>
+    <div class="card planner" id="planner">
+      <h2>Raise cash from this book</h2>
+      <p class="hint">Enter what the family needs. The plan sells first the stakes that give up the least value per dollar raised, valued at your hurdle rate, and assumes each sale closes at today's bid, net of the fees, costs and months to close entered for each stake.</p>
+      <div class="row"><label class="fld" for="need"><span>Cash needed, after tax</span><span class="in money"><i>$</i><input id="need" type="text" inputmode="decimal" placeholder="10,000,000" autocomplete="off"></span></label></div>
+      <div id="plan"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-position" hidden>
+    <div class="pos-head">
+      <button class="ghost" id="btn-back">All positions</button>
+      <label for="pos-pick" class="hint">Position</label>
+      <select id="pos-pick"></select>
+      <span class="chip" id="pos-chip" hidden></span>
+      <span class="spacer"></span>
+      <button class="plain" id="btn-run">Run again</button>
+      <button class="ghost danger" id="btn-del">Delete position</button>
+    </div>
+    <div class="split">
+      <div class="inputs" id="inputs">
+        <details class="card import" id="imp">
+          <summary><span>Fill from documents</span><small>Investor updates, cap tables, term sheets, broker emails, bank engagement letters</small></summary>
+          <div class="drop" id="drop">
+            <p><strong>Drop files here</strong> or <label class="linklike" for="files">choose files</label></p>
+            <p class="hint">PDF, Word, Excel, CSV, text or images. Files are read in this browser, then Claude pulls out the numbers on your account. You review every value before it is used.</p>
+            <input type="file" id="files" multiple accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.eml,.json,image/png,image/jpeg,image/webp">
+          </div>
+          <ul class="files" id="filelist"></ul>
+          <label class="fld" for="paste"><span>Or paste text</span><textarea id="paste" rows="3" placeholder="Paste an investor update, a cap table or a bid email"></textarea></label>
+          <div class="row"><button class="primary" id="btn-extract">Read documents</button><button class="plain" id="btn-extract-stop" hidden>Stop</button><span class="hint" id="extract-status" role="status"></span></div>
+          <div class="review" id="review"></div>
+        </details>
+        <div class="card"><h2>Company</h2><div class="fields" id="f-company"></div>
+          <details><summary>Model assumptions for this company</summary><div class="fields" id="f-company-adv"></div></details></div>
+        <div class="card"><h2>Cap table</h2>
+          <p class="hint">One row per share class. Seniority 1 is paid first and equal numbers share pari passu. The last preferred row is treated as the most recent priced round. Put your shares in the "Yours" column.</p>
+          <div class="tbl-wrap"><table class="cap" id="cap"></table></div>
+          <div class="row"><button class="plain" id="cap-add">Add class</button></div></div>
+        <div class="card"><h2>Your holding</h2><div class="fields" id="f-holding"></div></div>
+        <div class="card"><h2>Exit market</h2>
+          <h3>Bids for your shares</h3><div class="bids" id="bids"></div>
+          <div class="row"><button class="plain" id="bid-add">Add bid</button></div>
+          <div class="fields" id="f-market"></div></div>
+      </div>
+      <div class="results" id="results" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-family" hidden>
+    <div><h1>Family settings</h1><p class="lede">These apply to every position. They set the return the capital must earn, how the family weighs risk, and how gains are taxed.</p></div>
+    <div class="card"><div class="fields" id="f-family"></div></div>
+    <div class="card"><h2>Bank engagement</h2>
+      <p class="hint">The bank's terms for selling stakes. The fee and timing apply to every stake that has none of its own under Market. The minimum fee and the retainer are paid once for the whole package, in "Where to focus the bank" on the portfolio. To read them from the engagement letter, drop it into "Fill from documents" on any position.</p>
+      <div class="fields" id="f-bank"></div></div>
+  </section>
+
+  <section class="view method" id="v-method" hidden>
+    <article>
+      <div><h1>How the engine decides</h1><p class="lede">Every number on a position page comes from the steps below. All of them run in your browser on the inputs you entered, with no hidden data source.</p></div>
+
+      <h2>1. Today's value of the company</h2>
+      <p>A 2021 round price is not today's value. The engine follows IPEV calibration: start from the last round, then move it with market evidence.</p>
+      <ul>
+        <li><b>OPM backsolve (AICPA valuation guide).</b> Find the equity value at which the last round's preferred shares, with their preference and conversion rights, are worth exactly their issue price. This sits below the headline post-money, because preferred stock is worth more than common.</li>
+        <li><b>Index roll-forward.</b> Move that value by the comparable public index since the round.</li>
+        <li><b>Revenue multiple.</b> Revenue × public comps multiple × (1 − private discount) + cash − debt.</li>
+        <li><b>Blend.</b> The weight on the round decays as it ages: <span class="mono">w = exp(−age / 1.5 years)</span>. A five-year-old round carries 4% weight.</li>
+      </ul>
+
+      <h2>2. What your shares receive at any exit</h2>
+      <p>The full liquidation waterfall: preferences paid by seniority (pari passu within a rank), participation with caps, and each class converting to common when that pays more. Classes convert in order of their threshold, which is the equilibrium. In a qualified IPO every class converts. Fair value is the option pricing method: the waterfall averaged over a risk-neutral lognormal exit value.</p>
+
+      <h2>3. The company, simulated quarter by quarter</h2>
+      <div class="eq">growth      g ← g + 0.35·(g∞ − g)·dt + 0.10·√dt·ε − 0.35·Δmargin     cutting burn costs growth
+margin      m ← m + 0.25·(m* − m)·dt + 0.05·√dt·ε
+revenue     ln R ← ln R + g·dt + 0.12·√dt·(0.3·ε_mkt + 0.95·ε)
+multiple    EV/R = sector·(1 − disc)·exp(1.25·tanh(2·(growth + ½·margin − 0.25)))·exp(1.5·market surprise + premium)
+premium     decays at 30%/yr: a stale private premium fades toward comps
+exit window w ← w − 0.6·w·dt + 0.8·√dt·(0.6·ε_mkt + 0.8·ε)        open > 0, shut < 0</div>
+      <ul>
+        <li><b>Runway.</b> With under nine months of cash the company tries to raise. Success odds rise with its Rule of 40, an open window and momentum since the last round. Each new round dilutes you. A down round triggers anti-dilution and comes in senior. Run out of cash with no round and the company is sold for 10 to 40% of its value.</li>
+        <li><b>Exits as competing risks.</b> IPO hazard switches on with scale (revenue above the IPO bar) and quality (Rule of 40), scaled by the window. Acquisition hazard rises with quality and the window. IPO proceeds carry six months of lock-up risk. Acquisitions pay a control premium averaging 10%.</li>
+        <li><b>Disruption.</b> A shock knocks 25 points off growth and 40% off the multiple.</li>
+      </ul>
+
+      <h2>4. Uncertainty about the model itself</h2>
+      <p>Paths are split into 16 assumption sets. Each draws its own growth decay, margin path, multiple sensitivity, comps level, exit hazards and financing odds from priors centred on your inputs (Bayesian model averaging). The spread of answers across sets is the "P10 to P90" band and the agreement count.</p>
+
+      <h2>5. When to sell, if not now</h2>
+      <p>Every six months the engine compares the after-tax secondary bid with the expected value of waiting. That continuation value comes from a least-squares regression on the state: the bid level, Rule of 40, exit window and runway. This is Longstaff–Schwartz, the method used for American options. Holding is valued under this optimal resale policy, at your hurdle rate.</p>
+
+      <h2>6. The price test</h2>
+      <div class="eq">Sell Ratio = net bid today, after fees, costs, carry and tax / value of holding at your hurdle</div>
+      <p>Above 1, the bid wins. When some assumption sets favour selling and others holding, the engine sells the fraction that minimises the worst-case regret between them (Manski's diversification under ambiguity). With fees in proportion to the price that fraction is <span class="mono">f = (bid − V_P10) / (V_P90 − V_P10)</span>. A minimum fee or upfront costs make small sales dearer, so each fraction is tested directly. The price ladder inverts this. Below the walk-away price sell nothing. Above the sell-all price sell everything.</p>
+      <p>Sale costs apply to every sale, today's and later ones: the bank or broker fee with its minimum, costs paid even if no sale closes, and the months until the cash arrives, discounted at your hurdle. Today's upfront costs count once per expected attempt: at a 60% chance of closing, 1.7 times.</p>
+
+      <h2>7. The concentration test</h2>
+      <p>Family wealth at the horizon is simulated path by path. The rest of the portfolio and any cash from this stake compound along the same market draws, so correlation with public markets is counted. Each sale fraction is scored by constant-relative-risk-aversion utility, then aggregated across assumption sets with smooth ambiguity aversion (Klibanoff, Marinacci and Mukerji). This test can raise the sale fraction for a large or very volatile stake. It never blocks a sale that passes the price test.</p>
+
+      <h2>8. Taxes and frictions</h2>
+      <ul>
+        <li>Bank or broker fees on secondary sales, with any minimum fee, costs paid even if no sale closes, and the months until the cash arrives. SPV carry on gains above cost.</li>
+        <li>Federal long-term rate including the 3.8% net investment income tax, plus a state rate.</li>
+        <li>QSBS (§1202): once held five years, gains up to the greater of $10M or 10× basis are excluded. The test applies at each sale date, so waiting can earn the exclusion. You can set whether the state follows it.</li>
+        <li>Selling at a loss creates a tax credit when the family has gains to offset.</li>
+      </ul>
+
+      <h2>9. What the engine does not know</h2>
+      <ul>
+        <li>Private information about the company: a pending acquisition offer, a key customer at risk. Fold it in through growth, the hazards or the disruption rate.</li>
+        <li>Which buyers exist. The buyer count and the spread of their prices are placeholders until the bank reports real interest.</li>
+        <li>Fund LP interests. This version values direct stakes and SPV holdings in one company.</li>
+        <li>Tax advice. QSBS eligibility and state treatment need your tax counsel.</li>
+      </ul>
+
+      <h2>10. Selling through a bank: buyers and the package</h2>
+      <p>A marketed sale draws a random number of serious buyers (a Poisson count, two on average unless you enter the bank's count). Each bids around the name's typical price, with the spread you enter or the spread of three or more bids you have. The typical secondary discount is read as where deals usually clear, so the usual field of two buyers reproduces that price, and only a busier or quieter field moves it. The best bid, or a bid in hand if higher, sells when it reaches the reserve: the walk-away price. From this the engine gives each stake a chance of a sale at or above the reserve, a chance of no offers, a likely price, and the expected gain over holding. "Where to focus the bank" ranks stakes by that gain, and charges the engagement's minimum fee and retainer once to the package.</p>
+
+      <h2>11. Where the assumptions come from</h2>
+      <p>Three kinds of number feed every answer. Facts come from your documents: revenue, cash, the cap table, cost, bids. Policy is the family's choice: hurdle, risk aversion, tax, the bank's terms. Behaviour is the rest: how fast growth fades, how often companies are bought or go public, how buyers price stakes. Behaviour starts at engine defaults. They are reasonable for older US venture companies, but they are not fitted to data. Each position's "What moves the answer" test reruns the engine with every assumption pushed lower and higher, tags each one as your data, a family setting or an engine default, and names the defaults that move the answer most. Replace those first. Testing showed that errors in shared assumptions push every answer the same way: the 16 assumption sets do not cancel them. Calibration on the family's own past exits and secondary quotes is the fix.</p>
+
+      <h2>12. How this relates to the 100-point model</h2>
+      <p>Every criterion of the original scoring model is measured on each position page. Liquidity and an identifiable buyer (25 points) is the chance of a sale at or above the reserve, the chance of no offers, and whether the transfer can close. Exit price (20) is the Sell Ratio. Upside against downside (20) is the simulated range of outcomes. Revenue trajectory (7) and round recency (3) drive the simulation and the value. Holding period (15) and MOIC (10) enter through tax and the planning horizon, not as reasons to sell: an old stake is not worth less for being old, and the price paid does not change what it is worth now. The engine gives no 0 to 100 score. Fixed points cannot say whether a price beats holding, and in testing the score had almost no link to the true gain from selling.</p>
+      <p class="hint">Decision support for the family's investment committee, not investment advice.</p>
+
+      <h2>Engine defaults: judgment, not fitted to data</h2>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Parameter</th><th class="n">Default</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Growth decay</td><td class="n">35% / yr</td><td>Venture growth roughly halves every two years</td></tr>
+          <tr><td>Multiple sensitivity to growth + ½ margin</td><td class="n">2.5</td><td>About +28% multiple per 10 points near 25% growth, capped at 3.5× either way</td></tr>
+          <tr><td>Multiple beta to market surprises</td><td class="n">1.5</td><td>Growth multiples move more than the index</td></tr>
+          <tr><td>Acquisition likelihood</td><td class="n">8% / yr</td><td>Base rate for mature venture-backed companies</td></tr>
+          <tr><td>IPO likelihood once qualified</td><td class="n">30% / yr</td><td>Scaled by the window and quality gates</td></tr>
+          <tr><td>Revenue needed to IPO</td><td class="n">$200M</td><td>Approximate bar for a US technology IPO</td></tr>
+          <tr><td>OPM volatility</td><td class="n">60%</td><td>Late-stage venture equity; 90% when pre-revenue</td></tr>
+          <tr><td>Hurdle rate</td><td class="n">15%</td><td>Common family-office target for venture risk</td></tr>
+          <tr><td>Typical secondary discount</td><td class="n">30%</td><td>Older venture stakes have often traded well below fair value; replace with broker or bank data per name</td></tr>
+          <tr><td>Serious buyers in a marketed sale</td><td class="n">2</td><td>The usual field behind a typical secondary price; replace with the bank's count</td></tr>
+          <tr><td>Spread of buyers' prices</td><td class="n">25%</td><td>Bids for one stake commonly differ by a quarter; three bids of your own replace it</td></tr>
+          <tr><td>Chance a transfer closes</td><td class="n">95%, 60% with board consent, ×0.95 with a right of first refusal</td><td>Transfer restrictions block or delay many sales</td></tr>
+        </tbody>
+      </table></div>
+    </article>
+  </section>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(() => {
+  'use strict';
+  const X = window.ExitEngine;
+  const DEF = X.normalize({});
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fin = (x) => typeof x === 'number' && isFinite(x);
+
+  // ---------- formatting ----------
+  function money(x) {
+    if (!fin(x)) return '–';
+    const a = Math.abs(x), s = x < 0 ? '−$' : '$';
+    if (a < 0.5) return '$0';
+    if (a >= 1e9) return s + (a / 1e9).toFixed(a >= 1e10 ? 1 : 2) + 'B';
+    if (a >= 1e6) return s + (a / 1e6).toFixed(a >= 1e8 ? 0 : a >= 1e7 ? 1 : 2) + 'M';
+    if (a >= 1e3) return s + (a / 1e3).toFixed(a >= 1e5 ? 0 : 1) + 'K';
+    return s + a.toFixed(a < 100 ? 2 : 0);
+  }
+  const perShare = (x) => (fin(x) ? '$' + x.toFixed(x >= 100 ? 0 : x >= 1 ? 2 : x >= 0.01 ? 3 : 4) : '–');
+  const pct = (x, d = 0) => (fin(x) ? (x < 0 ? '−' : '') + Math.abs(x * 100).toFixed(d) + '%' : '–');
+  const two = (x) => (fin(x) ? x.toFixed(2) : '–');
+  const commas = (x) => (fin(x) ? (Math.abs(x) >= 1000 ? Math.round(x).toLocaleString('en-US') : String(+x.toFixed(6))) : '');
+  function parseNum(s) {
+    const t = String(s == null ? '' : s).trim().toLowerCase().replace(/[$,\s_%×]/g, '').replace(/−/g, '-').replace(/x$/, '');
+    if (!t) return null;
+    const m = t.match(/^(-?\d*\.?\d+)(k|m|mm|b|bn)?$/);
+    return m ? parseFloat(m[1]) * ({ k: 1e3, m: 1e6, mm: 1e6, b: 1e9, bn: 1e9 }[m[2]] || 1) : NaN;
+  }
+  const getPath = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
+  function setPath(o, p, v) {
+    const ks = p.split('.');
+    let a = o;
+    for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]] = a[ks[i]] || {};
+    if (v === null || v === undefined) delete a[ks[ks.length - 1]]; else a[ks[ks.length - 1]] = v;
+  }
+  function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i); return (h >>> 0).toString(36); }
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+
+  // ---------- field specs: [path, label, kind, help, options] ----------
+  const COMPANY = [
+    ['company.name', 'Company', 'text'], ['company.sector', 'Sector', 'text'],
+    ['company.revenue', 'Revenue run-rate (ARR)', 'money', 'Leave blank for a pre-revenue company.'],
+    ['company.growth', 'Revenue growth, last 12 months', 'pct'],
+    ['company.fcfMargin', 'Free-cash-flow margin', 'pct', 'Negative while burning. Blank: worked out from burn.'],
+    ['company.monthlyBurn', 'Net burn per month', 'money'], ['company.cash', 'Cash on hand', 'money'],
+    ['company.debt', 'Debt (venture loans)', 'money'], ['company.lastRoundDate', 'Last priced round', 'date'],
+    ['company.indexMove', 'Comparable index since that round', 'pct', 'Example: −30 for cloud software since late 2021.'],
+    ['company.compMultiple', 'Sector EV / revenue multiple', 'x', 'Typical for the sector. The engine adjusts it for this company\'s growth and margin.'],
+    ['company.privateDiscount', 'Private-company discount', 'pct'],
+  ];
+  const COMPANY_ADV = [
+    ['company.longRunGrowth', 'Long-run growth', 'pct'], ['company.targetMargin', 'Mature cash-flow margin', 'pct'],
+    ['company.maHazard', 'Acquisition likelihood per year', 'pct'], ['company.ipoHazard', 'IPO likelihood per year, once qualified', 'pct'],
+    ['company.ipoRevenue', 'Revenue needed to IPO', 'money'], ['company.disruption', 'Disruption shock per year', 'pct'],
+    ['company.exitYears', 'Years to a liquidity event, for fair value', 'num'],
+    ['company.valueGrowth', 'Value growth (pre-revenue only)', 'pct'], ['company.vol', 'Volatility (pre-revenue only)', 'pct'],
+  ];
+  const HOLDING = [
+    ['holding.costBasis', 'Cost basis', 'money'], ['holding.acquired', 'Acquired on', 'date'],
+    ['holding.carry', 'SPV carry on gains', 'pct', 'Zero for a direct holding.'],
+    ['holding.qsbs', 'QSBS-eligible stock (§1202)', 'bool', 'Original-issue C-corp stock. Confirm with tax counsel.'],
+  ];
+  const MARKET = [
+    ['market.fee', 'Bank or broker fee', 'pct', 'Share of the sale price. Blank: the bank fee in Family settings.'],
+    ['market.minFee', 'Minimum fee, if sold on its own', 'money', 'Leave blank when the stake goes in the bank\'s package: the package pays the engagement minimum once.'],
+    ['market.upfront', 'Costs paid even if no sale closes', 'money', 'Retainer and legal for this stake alone. Blank inside the package.'],
+    ['market.monthsToClose', 'Months until the cash arrives', 'num', 'From hiring the bank to closing, including the company\'s approval period. Blank: Family settings.'],
+    ['market.noBidDiscount', 'Typical secondary discount for this name', 'pct', 'Where deals in stakes like this usually clear, below fair value. Prices later sales, today\'s sale when there is no bid, and the middle of the buyers\' range.'],
+    ['market.buyers', 'Serious buyers expected', 'num', 'Placeholder 2, the usual field. Replace with the bank\'s count of interested buyers.'],
+    ['market.bidSpread', 'How far apart their prices land', 'pct', 'Placeholder 25%, or the spread of your bids once three or more are entered.'],
+    ['market.pClose', 'Chance the sale closes', 'pct', 'Blank: estimated from the terms below.'],
+    ['market.rofr', 'Company holds a right of first refusal', 'bool'], ['market.consent', 'Transfer needs board consent', 'bool'],
+    ['market.blocked', 'Transfers are prohibited', 'bool'],
+  ];
+  const FAMILY = [
+    ['wealth', 'Family wealth, all assets', 'money', 'Sizes concentration risk. Stays in this shared workspace.'],
+    ['hurdle', 'Hurdle rate', 'pct', 'What this capital must earn to stay in venture.'],
+    ['gamma', 'Risk aversion', 'select', 'Relative risk aversion of the family.', [[1, '1 · growth-seeking'], [2, '2'], [3, '3 · typical family office'], [5, '5 · cautious'], [8, '8 · capital preservation']]],
+    ['ambiguity', 'Aversion to model uncertainty', 'select', 'Extra weight on pessimistic assumption sets.', [[0, 'None'], [1, 'Moderate'], [3, 'Strong']]],
+    ['portfolioReturn', 'Expected return of the family portfolio', 'pct'], ['equityWeight', 'Market exposure of that portfolio', 'x'],
+    ['marketVol', 'Public market volatility', 'pct'], ['riskFree', 'Risk-free rate', 'pct'],
+    ['taxFed', 'Federal capital-gains rate, with NIIT', 'pct'], ['taxState', 'State capital-gains rate', 'pct'],
+    ['horizon', 'Planning horizon, years', 'num', 'Any stake still private by then is sold on the secondary market.'],
+    ['window', 'Exit window today', 'select', 'IPO and M&A conditions now.', [[-1, 'Shut'], [0, 'Neutral'], [1, 'Open']]],
+    ['paths', 'Simulation paths', 'select', 'More paths, tighter answers, slower runs.', [[6000, '6,000 · fast'], [12000, '12,000 · standard'], [24000, '24,000 · precise']]],
+    ['stateConformsQsbs', 'State follows the QSBS exclusion', 'bool'],
+    ['qsbsAllowed', 'Holder can claim QSBS (US individual, trust or pass-through)', 'bool'],
+    ['lossesUsable', 'Capital losses offset other gains', 'bool'],
+  ];
+  const BANK = [
+    ['bankFee', 'Fee, share of the sale price', 'pct'], ['bankMonths', 'Months until the cash arrives', 'num'],
+    ['bankMinFee', 'Minimum fee for the engagement', 'money'], ['bankUpfront', 'Retainer and legal, paid even if nothing sells', 'money'],
+  ];
+  const CAP = [['name', 'Class', 'text'], ['shares', 'Shares', 'int'], ['oip', 'Issue price', 'num'], ['prefMult', 'Pref ×', 'num'],
+    ['participating', 'Particip.', 'bool'], ['capMult', 'Cap ×', 'num'], ['rank', 'Seniority', 'num'], ['ad', 'Anti-dilution', 'ad'],
+    ['common', 'Common', 'bool'], ['ours', 'Yours', 'int']];
+  const FAMILY_DEF = Object.assign({}, DEF.F, { paths: 12000 });
+  const TEMPLATE = () => ({
+    company: { name: 'New company' },
+    cap: [
+      { name: 'Common + options', shares: null, oip: 0, prefMult: 0, participating: false, capMult: 0, rank: 9, ad: 'none', common: true, ours: 0 },
+      { name: 'Series A', shares: null, oip: null, prefMult: 1, participating: false, capMult: 0, rank: 1, ad: 'wa', common: false, ours: null },
+    ],
+    holding: {}, market: { bids: [] },
+  });
+
+  // ---------- state ----------
+  const S = {
+    db: null, sample: null, imagesOK: false, canWrite: null, loaded: false,
+    positions: new Map(), family: clone(FAMILY_DEF), current: null, view: 'portfolio',
+    results: new Map(), tornado: new Map(), dirty: new Set(), saving: new Set(), resave: new Set(), timers: new Map(),
+  };
+
+  // ---------- engine client: one Web Worker, falls back to the main thread ----------
+  const Engine = (() => {
+    let w = null, seq = 0;
+    const pend = new Map();
+    const local = (kind, input, onP) => new Promise((res, rej) => setTimeout(() => {
+      try { res(kind === 'tornado' ? X.tornado(input, (k, n) => onP && onP(k / n)) : X.run(input)); } catch (e) { rej(e); }
+    }, 20));
+    try {
+      w = new Worker('engine.js');
+      w.onmessage = (e) => {
+        const m = e.data, p = pend.get(m.id);
+        if (!p) return;
+        if ('progress' in m) { if (p.onP) p.onP(m.progress); return; }
+        pend.delete(m.id);
+        if (m.error) p.rej(new Error(m.error)); else p.res(m.result);
+      };
+      w.onerror = (e) => { if (e.preventDefault) e.preventDefault(); w = null; for (const p of pend.values()) p.retry(); pend.clear(); };
+    } catch (e) { w = null; }
+    return {
+      call(kind, input, onP) {
+        if (!w) return local(kind, input, onP);
+        return new Promise((res, rej) => {
+          const id = ++seq;
+          pend.set(id, { res, rej, onP, retry: () => local(kind, input, onP).then(res, rej) });
+          w.postMessage({ id, kind, input });
+        });
+      },
+    };
+  })();
+
+  // one job at a time; the open position jumps the queue and stale jobs are dropped
+  const Q = [];
+  let busy = false;
+  const queued = new Map();
+  function inputFor(id) {
+    const d = S.positions.get(id) || {};
+    return { family: S.family, company: d.company || {}, cap: d.cap || [], holding: d.holding || {}, market: d.market || {}, sim: { paths: S.family.paths || 12000 } };
+  }
+  function want(id, prio) {
+    if (!S.positions.has(id)) return;
+    const input = inputFor(id), h = hash(JSON.stringify(input));
+    const cur = S.results.get(id);
+    if ((cur && cur.hash === h) || queued.get(id) === h) return;
+    for (let i = Q.length - 1; i >= 0; i--) if (Q[i].id === id) Q.splice(i, 1);
+    queued.set(id, h);
+    Q.push({ id, h, input, prio });
+    pump();
+  }
+  function pump() {
+    if (busy || !Q.length) return;
+    Q.sort((a, b) => (b.id === S.current) - (a.id === S.current) || b.prio - a.prio);
+    const job = Q.shift();
+    busy = true;
+    if (job.id === S.current && S.view === 'position') renderResults();
+    Engine.call('run', job.input)
+      .then((res) => S.results.set(job.id, { hash: job.h, res }))
+      .catch((e) => S.results.set(job.id, { hash: job.h, error: e.message || String(e) }))
+      .finally(() => {
+        busy = false;
+        if (queued.get(job.id) === job.h) queued.delete(job.id);
+        renderPortfolio();
+        if (job.id === S.current && S.view === 'position') renderResults();
+        pump();
+      });
+  }
+
+  // ---------- storage ----------
+  function setStore(s, msg) {
+    const el = $('#store');
+    el.dataset.s = s;
+    el.textContent = { live: 'Saved to the shared workspace', saving: 'Saving', local: 'Saved in this browser only', readonly: 'View only', error: msg || 'Storage error, changes not saved', connecting: 'Connecting' }[s] || s;
+  }
+  const LOCAL_KEY = 'vc-exit-engine-v1';
+  const use = (n) => (window.claude && typeof window.claude.use === 'function' ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
+
+  async function initStore() {
+    setStore('connecting');
+    use('sample').then(async (sample) => {
+      S.sample = sample;
+      if (sample) { const lim = await sample.limits().catch(() => null); S.imagesOK = !!(lim && lim.images); }
+      renderImportState();
+    });
+    const [db, user] = await Promise.all([use('db'), use('user')]);
+    if (user) { try { S.canWrite = await user.can('data.write'); } catch (e) { S.canWrite = null; } }
+    S.db = db;
+    if (!db) {   // outside claude.ai (e.g. GitHub Pages): keep data in this browser only, start from the examples
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(LOCAL_KEY)); } catch (e) {}
+      if (!saved) saved = await fetch('examples.json').then((r) => r.json()).catch(() => null);
+      if (saved) {
+        S.family = Object.assign(clone(FAMILY_DEF), saved.family || {});
+        S.positions = new Map(Object.entries(saved.positions || {}));
+        for (const id of S.positions.keys()) want(id, 1);
+      }
+      S.loaded = true; setStore('local'); renderPortfolio(); return;
+    }
+    setStore(S.canWrite === false ? 'readonly' : 'live');
+    db.collection('positions').onSnapshot((snap) => {
+      const next = new Map();
+      for (const d of snap.docs) next.set(d.id, clone(d.data()));
+      for (const id of S.dirty) if (S.positions.has(id)) next.set(id, S.positions.get(id));   // keep unsaved local edits
+      const openChanged = S.current && !S.dirty.has(S.current) && JSON.stringify(next.get(S.current)) !== JSON.stringify(S.positions.get(S.current));
+      S.positions = next; S.loaded = true;
+      for (const id of next.keys()) want(id, 1);
+      renderPortfolio();
+      if (S.view === 'position') {
+        if (S.current && !next.has(S.current)) { show('portfolio'); return; }
+        renderPicker();
+        if (openChanged && !$('#inputs').contains(document.activeElement)) renderInputs();
+      }
+    }, (e) => setStore('error', 'Storage stopped: reload the page'));
+    db.doc('settings/family').onSnapshot((snap) => {
+      if (S.dirty.has('family')) return;
+      S.family = Object.assign(clone(FAMILY_DEF), snap.exists ? snap.data() : {});
+      if (S.view === 'family' && !$('#v-family').contains(document.activeElement)) renderFamily();
+      for (const id of S.positions.keys()) want(id, 1);
+    }, () => {});
+  }
+
+  function scheduleSave(key) {
+    S.dirty.add(key);
+    clearTimeout(S.timers.get(key));
+    S.timers.set(key, setTimeout(() => save(key), 1200));
+  }
+  function saveLocal() {
+    if (S.db) return;
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ family: S.family, positions: Object.fromEntries(S.positions) })); }
+    catch (e) { setStore('error', 'Browser storage blocked: changes not saved'); }
+  }
+  async function save(key) {
+    if (!S.db) { S.dirty.delete(key); saveLocal(); return; }
+    if (S.canWrite === false) { S.dirty.delete(key); return; }
+    if (S.saving.has(key)) { S.resave.add(key); return; }   // one write at a time per document
+    const body = key === 'family' ? S.family : S.positions.get(key);
+    if (!body) { S.dirty.delete(key); return; }
+    S.saving.add(key); setStore('saving');
+    try {
+      const ref = key === 'family' ? S.db.doc('settings/family') : S.db.collection('positions').doc(key);
+      await ref.set(Object.assign(clone(body), { updatedAt: new Date().toISOString() }));
+      if (!S.resave.has(key)) S.dirty.delete(key);
+      setStore('live');
+    } catch (e) {
+      if (e && e.code === 'invalid_argument') { S.canWrite = false; S.dirty.delete(key); setStore('readonly'); }
+      else if (e && e.code === 'quota_exceeded') setStore('error', 'Storage is full: delete old positions');
+      else setStore('error');
+    } finally {
+      S.saving.delete(key);
+      if (S.resave.delete(key)) save(key);
+    }
+  }
+
+  // ---------- views ----------
+  function show(view) {
+    S.view = view;
+    for (const v of ['portfolio', 'position', 'family', 'method']) $('#v-' + v).hidden = v !== view;
+    for (const b of $$('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
+    if (view === 'portfolio') renderPortfolio();
+    if (view === 'position') {
+      if (!S.current || !S.positions.has(S.current)) S.current = [...S.positions.keys()][0] || null;
+      renderPosition();
+    }
+    if (view === 'family') renderFamily();
+    window.scrollTo(0, 0);
+  }
+  function open(id) { S.current = id; show('position'); }
+
+  const vClass = (v) => (v === 'Sell all' ? 'v-sell' : /^Sell/.test(v) ? 'v-part' : v === 'Wait, then sell' ? 'v-wait' : v === 'Build liquidity' ? 'v-stuck' : 'v-hold');
+  const sortedIds = () => [...S.positions.keys()].sort((a, b) => String(getPath(S.positions.get(a), 'company.name') || '').localeCompare(String(getPath(S.positions.get(b), 'company.name') || '')));
+
+  function renderPortfolio() {
+    const ids = sortedIds(), rows = [];
+    let fair = 0, bids = 0, sell = 0, gain = 0, done = 0;
+    for (const id of ids) {
+      const d = S.positions.get(id), r = S.results.get(id), res = r && r.res;
+      const name = getPath(d, 'company.name') || 'Untitled', sector = getPath(d, 'company.sector') || '';
+      if (res) {
+        done++;
+        fair += res.position.fvOpm;
+        if (res.sale.hasBid) bids += res.sale.S0gross;
+        sell += res.decision.fStar * res.sale.S0net;
+        gain += res.decision.fStar * (res.sale.S0net - res.hold.vWait);
+      }
+      const pend = queued.has(id) && (!r || r.hash !== queued.get(id));
+      rows.push(`<tr class="pick" data-id="${esc(id)}" tabindex="0">
+        <td class="co">${esc(name)} ${d.example ? '<span class="chip ex">Example</span>' : ''}<small class="hint">${esc(sector)}</small></td>
+        <td>${res ? `<span class="pill ${vClass(res.decision.verdict)}">${esc(res.decision.verdict)}</span>` : r && r.error ? '<span class="chip">Needs inputs</span>' : '<span class="chip">Simulating</span>'}${pend && res ? ' <span class="hint">updating</span>' : ''}</td>
+        <td class="n">${res ? two(res.decision.sr) : '–'}</td>
+        <td class="n">${res ? (res.sale.hasBid ? '' : '<span class="hint">est. </span>') + money(res.sale.S0gross) : '–'}</td>
+        <td class="n">${res ? money(res.position.fvOpm) : '–'}</td>
+        <td class="n">${res ? money(res.hold.vWait) : '–'}</td>
+        <td class="n">${res ? pct(res.hold.irr) : '–'}</td>
+        <td class="n">${res ? perShare(res.decision.ladder.walkAway) + ' / ' + perShare(res.decision.ladder.sellAll) : '–'}</td></tr>`);
+    }
+    $('#ptable').innerHTML = ids.length ? `<thead><tr><th>Company</th><th>Verdict</th><th class="n">Sell Ratio</th><th class="n">Bid for stake</th><th class="n">Fair value</th><th class="n">Value of holding</th><th class="n">Return from holding</th><th class="n">Reserve (walk away) / sell all, per share</th></tr></thead><tbody>${rows.join('')}</tbody>` : '';
+    const empty = $('#pempty');
+    empty.hidden = ids.length > 0;
+    $('#btn-add').hidden = S.canWrite === false;   // view-only teammates cannot create positions
+    if (S.loaded && !ids.length) empty.innerHTML = S.canWrite === false ? '<strong>No positions yet</strong><span>Someone with edit access adds positions here.</span>' : '<strong>No positions yet</strong><span>Add a position, then fill it in by hand or from the company\'s documents.</span><button class="primary" id="btn-add2">Add position</button>';
+    const hasEx = ids.some((id) => S.positions.get(id).example);
+    $('#tiles').innerHTML = ids.length ? [
+      ['Positions', String(ids.length), done < ids.length ? `${ids.length - done} still simulating` : hasEx ? 'includes examples' : 'all simulated'],
+      ['Fair value of stakes', money(fair), 'option-pricing method'],
+      ['Live bids', money(bids), 'gross, for whole stakes'],
+      ['Recommended sales', money(sell), 'net cash after fees and tax'],
+      ['Gain over holding', money(gain), 'from the recommended sales, at your hurdle'],
+    ].map(([l, v, s]) => `<div class="tile"><span class="lab">${l}</span><span class="val">${v}</span><span class="sub">${s}${l === 'Positions' && hasEx ? ' · <button class="ghost" id="btn-clear-ex" style="padding:0;font-size:12px">remove examples</button>' : ''}</span></div>`).join('') : '';
+    renderFocus();
+    renderPlan();
+  }
+
+  // Sale priorities: stakes ranked by what marketing them adds over holding; the package carries the engagement's
+  // minimum fee and retainer once. shortcut: the minimum-fee top-up uses expected proceeds, not their spread.
+  function renderFocus() {
+    const el = $('#focus'), rows = [];
+    for (const id of sortedIds()) {
+      const r = S.results.get(id), res = r && r.res;
+      if (res && res.process) rows.push({ id, name: getPath(S.positions.get(id), 'company.name') || 'Untitled', res, p: res.process });
+    }
+    el.hidden = !rows.length;
+    if (!rows.length) return;
+    rows.sort((a, b) => b.p.gain - a.p.gain);
+    const F = S.family, inc = rows.filter((x) => x.p.gain > 0), sum = (f) => inc.reduce((a, x) => a + f(x), 0);
+    const gain = sum((x) => x.p.gain), cash = sum((x) => x.p.cash), fees = sum((x) => x.res.sale.fee * x.p.gross);
+    const retainer = F.bankUpfront || 0, topUp = Math.max(0, (F.bankMinFee || 0) - fees), net = gain - retainer - topUp;
+    const why = (x) => (x.p.gain > 0 ? 'Yes' : x.res.sale.pClose < 0.05 ? 'No: transfers are blocked' : 'No: holding is worth more');
+    el.innerHTML = `<h2>Where to focus the bank</h2>
+      <p class="hint">Ranked by what marketing each stake adds over holding: the chance a buyer bids at or above the reserve, times how far such bids beat holding at your hurdle. Buyer numbers on each stake are placeholders until the bank reports real interest, so treat the order as provisional.</p>
+      <div class="tbl-wrap"><table><thead><tr><th class="n">#</th><th>Company</th><th class="n">Chance of a sale at or above reserve</th><th class="n">Chance of no offers</th><th class="n">Reserve, per share</th><th class="n">Likely price if sold</th><th class="n">Expected gain over holding</th><th>In the package</th></tr></thead><tbody>
+      ${rows.map((x, i) => `<tr class="pick" data-id="${esc(x.id)}" tabindex="0"><td class="n">${i + 1}</td><td class="co">${esc(x.name)}</td><td class="n">${pct(x.p.pSale)}</td><td class="n">${pct(x.p.noOffers)}</td><td class="n">${perShare(x.p.reserve)}</td><td class="n">${perShare(x.p.price)}</td><td class="n">${money(x.p.gain)}</td><td>${why(x)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="facts"><span>Package <b>${inc.length} of ${rows.length}</b> stakes</span><span>Expected cash after tax <b>${money(cash)}</b></span><span>Expected gain before fixed costs <b>${money(gain)}</b></span><span>Retainer <b>${money(retainer)}</b></span><span>Minimum-fee top-up <b>${money(topUp)}</b></span><span>Net gain <b>${money(net)}</b></span></p>
+      ${inc.length && net <= 0 ? '<p class="hint">At these terms the package does not cover the bank\'s fixed costs. Negotiate the minimum or the retainer, or wait for real buyer interest before engaging.</p>' : ''}
+      ${!(F.bankMinFee > 0 || F.bankUpfront > 0) ? '<p class="hint">Enter the bank\'s minimum fee and retainer in Family settings to see the package\'s fixed costs.</p>' : ''}`;
+  }
+
+  function renderPlan() {
+    const need = parseNum($('#need').value), el = $('#plan');
+    if (!fin(need) || need <= 0) { el.innerHTML = ''; return; }
+    const cands = [];
+    for (const id of sortedIds()) {
+      const r = S.results.get(id), res = r && r.res;
+      if (!res || res.sale.pClose < 0.05 || !(res.sale.S0net > 0)) continue;
+      cands.push({ id, name: getPath(S.positions.get(id), 'company.name') || 'Untitled', cash: res.sale.S0net, cost: (res.hold.vWait - res.sale.S0net) / res.sale.S0net, res });
+    }
+    cands.sort((a, b) => a.cost - b.cost);
+    let left = need, given = 0;
+    const take = [];
+    for (const c of cands) {
+      if (left <= 0) break;
+      const f = Math.min(1, left / c.cash);
+      take.push(Object.assign({ f }, c)); left -= f * c.cash; given += f * c.cash * c.cost;
+    }
+    el.innerHTML = take.length ? `<div class="tbl-wrap"><table><thead><tr><th>Sell</th><th class="n">Share of stake</th><th class="n">Net cash</th><th class="n">Value given up per $1</th><th>Model's own call</th></tr></thead><tbody>${take.map((t) => `<tr><td class="co">${esc(t.name)}</td><td class="n">${pct(t.f)}</td><td class="n">${money(t.f * t.cash)}</td><td class="n">${t.cost < 0 ? '+' + money(-t.cost).slice(1) + ' gain' : '$' + t.cost.toFixed(2)}</td><td><span class="pill ${vClass(t.res.decision.verdict)}">${esc(t.res.decision.verdict)}</span></td></tr>`).join('')}</tbody></table></div>
+      <p class="facts"><span>Raised <b>${money(need - Math.max(0, left))}</b></span><span>Value ${given > 0 ? 'given up' : 'gained'} at your hurdle <b>${money(Math.abs(given))}</b></span>${left > 0 ? `<span>Short by <b>${money(left)}</b>: every stake with a bid is used</span>` : ''}</p>` : '<p class="hint">No position has a sale price yet.</p>';
+  }
+
+  // ---------- forms ----------
+  function shown(kind, v) {
+    if (v === undefined || v === null || v === '') return '';
+    if (kind === 'pct') return String(+(v * 100).toFixed(4));
+    if (kind === 'money' || kind === 'int') return commas(v);
+    return String(v);
+  }
+  function fieldHTML(spec, obj, def) {
+    const [path, label, kind, help, opts] = spec, id = 'f_' + path.replace(/\./g, '_');
+    const v = getPath(obj, path), dv = def ? getPath(def, path.replace(/^company\./, '')) : undefined;
+    const hl = help ? `<small>${esc(help)}</small>` : '';
+    if (kind === 'bool') return `<label class="fld chk" for="${id}"><input type="checkbox" id="${id}" data-path="${path}" data-kind="bool"${v ? ' checked' : ''}><span>${esc(label)}</span>${hl}</label>`;
+    if (kind === 'select') return `<label class="fld" for="${id}"><span>${esc(label)}</span><select id="${id}" data-path="${path}" data-kind="select">${opts.map(([val, t]) => `<option value="${val}"${String(v == null ? dv : v) === String(val) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>${hl}</label>`;
+    const unit = kind === 'pct' ? '<i>%</i>' : kind === 'x' ? '<i>×</i>' : '';
+    return `<label class="fld" for="${id}"><span>${esc(label)}</span><span class="in ${kind}">${kind === 'money' ? '<i>$</i>' : ''}<input id="${id}" data-path="${path}" data-kind="${kind}" type="${kind === 'date' ? 'date' : 'text'}" inputmode="${kind === 'text' || kind === 'date' ? 'text' : 'decimal'}" value="${esc(shown(kind, v))}" placeholder="${esc(shown(kind, dv))}" autocomplete="off">${unit}</span>${hl}</label>`;
+  }
+  function readField(el) {
+    const kind = el.dataset.kind;
+    if (kind === 'bool') return el.checked;
+    if (kind === 'select' || kind === 'ad') return isNaN(+el.value) ? el.value : +el.value;
+    if (kind === 'text' || kind === 'date') return el.value.trim() || null;
+    const n = parseNum(el.value);
+    if (n === null) return null;
+    if (!isFinite(n)) return NaN;
+    return kind === 'pct' ? n / 100 : n;
+  }
+  function bindFields(root, target, onChange) {
+    root.addEventListener('change', (e) => {
+      const el = e.target, path = el.dataset && el.dataset.path;
+      if (!path) return;
+      const v = readField(el);
+      if (Number.isNaN(v)) { el.setAttribute('aria-invalid', 'true'); el.title = 'Enter a number such as 48M, 48,000,000 or 12.5'; return; }
+      el.removeAttribute('aria-invalid'); el.removeAttribute('title');
+      setPath(target(), path, v);
+      if (!['bool', 'select', 'date', 'text'].includes(el.dataset.kind)) el.value = shown(el.dataset.kind, v);
+      onChange();
+    });
+  }
+
+  function renderPicker() {
+    $('#pos-pick').innerHTML = sortedIds().map((id) => `<option value="${esc(id)}"${id === S.current ? ' selected' : ''}>${esc(getPath(S.positions.get(id), 'company.name') || 'Untitled')}</option>`).join('');
+    const d = S.positions.get(S.current);
+    $('#pos-chip').hidden = !(d && d.example);
+    $('#pos-chip').textContent = 'Example data';
+    $('#pos-chip').className = 'chip ex';
+  }
+  function renderPosition() {
+    if (!S.current) { $('#inputs').hidden = true; $('#results').innerHTML = '<div class="card empty"><strong>No position open</strong><span>Add a position from the portfolio.</span></div>'; return; }
+    $('#inputs').hidden = false;
+    renderPicker(); renderInputs(); renderImportState();
+    $('#review').innerHTML = ''; $('#extract-status').textContent = '';
+    want(S.current, 2);
+    renderResults();
+  }
+  function renderInputs() {
+    const d = S.positions.get(S.current);
+    if (!d) return;
+    $('#f-company').innerHTML = COMPANY.map((f) => fieldHTML(f, d)).join('');
+    $('#f-company-adv').innerHTML = COMPANY_ADV.map((f) => fieldHTML(f, d, DEF.C)).join('');
+    $('#f-holding').innerHTML = HOLDING.map((f) => fieldHTML(f, d)).join('');
+    $('#f-market').innerHTML = MARKET.map((f) => fieldHTML(f, d, { market: { fee: S.family.bankFee, minFee: DEF.M.minFee, upfront: DEF.M.upfront, monthsToClose: S.family.bankMonths, noBidDiscount: DEF.M.noBidDiscount, buyers: DEF.M.buyers, bidSpread: DEF.M.spread } })).join('');
+    renderCap(); renderBids();
+    const ro = S.canWrite === false;
+    for (const el of $$('#inputs input, #inputs select, #inputs textarea, #inputs button')) if (!el.closest('#imp')) el.disabled = ro;
+    $('#btn-del').hidden = ro;
+  }
+  function cell(i, key, kind, v) {
+    const a = `data-row="${i}" data-key="${key}" data-kind="${kind}" aria-label="${esc(key)} row ${i + 1}"`;
+    if (kind === 'bool') return `<td class="c"><input type="checkbox" ${a}${v ? ' checked' : ''}></td>`;
+    if (kind === 'ad') return `<td><select ${a}>${[['wa', 'Weighted avg'], ['fr', 'Full ratchet'], ['none', 'None']].map(([k, t]) => `<option value="${k}"${(v || 'wa') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></td>`;
+    return `<td><input type="text" ${a} inputmode="${kind === 'text' ? 'text' : 'decimal'}" value="${esc(kind === 'int' ? commas(v) : v == null ? '' : v)}" autocomplete="off"></td>`;
+  }
+  function renderCap() {
+    const rows = (S.positions.get(S.current).cap || []);
+    $('#cap').innerHTML = `<thead><tr>${CAP.map(([, l]) => `<th scope="col">${l}</th>`).join('')}<th><span class="hint">Remove</span></th></tr></thead><tbody>${rows.map((r, i) => `<tr>${CAP.map(([k, , kind]) => cell(i, k, kind, r[k])).join('')}<td><button class="icon" data-del-cap="${i}" aria-label="Remove ${esc(r.name || 'class')}">✕</button></td></tr>`).join('')}</tbody>`;
+  }
+  function renderBids() {
+    const bids = getPath(S.positions.get(S.current), 'market.bids') || [];
+    $('#bids').innerHTML = bids.length ? bids.map((b, i) => `<div class="bid">
+      <span class="in"><i>$</i><input data-bid="${i}" data-key="price" data-kind="num" value="${esc(b.price == null ? '' : b.price)}" inputmode="decimal" aria-label="Bid ${i + 1} price per share" placeholder="per share" autocomplete="off"></span>
+      <span class="in text bid-src"><input data-bid="${i}" data-key="source" data-kind="text" value="${esc(b.source || '')}" aria-label="Bid ${i + 1} source" placeholder="Buyer or broker" autocomplete="off"></span>
+      <span class="in date"><input type="date" data-bid="${i}" data-key="date" data-kind="date" value="${esc(b.date || '')}" aria-label="Bid ${i + 1} date"></span>
+      <button class="icon" data-del-bid="${i}" aria-label="Remove bid ${i + 1}">✕</button></div>`).join('') : '<p class="hint">No bids yet. Without one, the sale price assumes the discount set below.</p>';
+  }
+  function changed() { scheduleSave(S.current); clearTimeout(S.timers.get('run')); S.timers.set('run', setTimeout(() => want(S.current, 2), 500)); renderPicker(); }
+
+  // ---------- results ----------
+  function renderResults() {
+    const el = $('#results'), r = S.results.get(S.current);
+    const fresh = r && r.hash === hash(JSON.stringify(inputFor(S.current)));
+    if (!r) { el.innerHTML = `<div class="card skeleton"><h2>Simulating ${commas(S.family.paths || 12000)} paths</h2><div class="ln"></div><div class="ln" style="width:70%"></div><div class="ln" style="width:85%"></div></div>`; return; }
+    if (r.error) { el.innerHTML = `<div class="card"><h2>Needs more inputs</h2><p>${esc(r.error)}</p></div>`; return; }
+    const res = r.res, d = res.decision, s = res.sale, h = res.hold, p = res.position;
+    const name = getPath(S.positions.get(S.current), 'company.name') || 'This company';
+    const vc = vClass(d.verdict), lo = 0.5, hi = 1.6, at = (x) => (100 * (Math.min(hi, Math.max(lo, x)) - lo) / (hi - lo)).toFixed(2) + '%';
+    el.innerHTML = `
+      <div class="card ticket">
+        <div class="t-top"><span class="t-co">${esc(name)} · as of ${esc(res.asOf)}</span>${fresh ? '' : '<span class="chip">Inputs changed, updating</span>'}</div>
+        <div class="verdict ${vc}">${esc(d.verdict)}</div>
+        <p class="why">${why(res)}</p>
+        <div class="sr">
+          <div><div class="lab">Sell Ratio</div><div class="big num">${two(d.sr)}</div></div>
+          <div><div class="meter" role="img" aria-label="Sell Ratio ${two(d.sr)}, range ${two(d.srBand[0])} to ${two(d.srBand[2])}">
+            <div class="trk"></div><div class="band" style="left:${at(d.srBand[0])};width:calc(${at(d.srBand[2])} - ${at(d.srBand[0])})"></div>
+            <div class="one" style="left:${at(1)}"></div><div class="pt" style="left:${at(d.sr)}"></div>
+            <span class="mk" style="left:${at(lo)};transform:none">hold</span><span class="mk" style="left:${at(1)}">1.00</span><span class="mk" style="left:${at(hi)};transform:translateX(-100%)">sell</span></div>
+            <div class="lab">Net bid ÷ value of holding at your ${pct(d.hurdle)} hurdle. Range ${two(d.srBand[0])} to ${two(d.srBand[2])} across assumption sets; ${Math.round(d.agree * res.bundles)} of ${res.bundles} agree.</div></div>
+        </div>
+        <div class="facts"><span>Sell <b>${pct(d.fStar)}</b> of the stake</span><span>Price test <b>${pct(d.fHedge)}</b></span><span>Concentration test <b>${pct(d.fUtil)}</b></span><span>Sale closes <b>${pct(s.pClose)}</b> of the time</span></div>
+      </div>
+      <div class="card ladder"><h2>Price ladder, per share</h2><p class="hint">When a bank or broker markets the stake, give it the walk-away price as the reserve. It already covers the fees, costs and months to close entered for this stake.</p>${ladderHTML(res)}</div>
+      <div class="stats">${statsHTML(res)}</div>
+      <div class="card">${criteriaHTML(res)}</div>
+      <div class="card"><div class="ch-head"><h2>If you hold: what the stake returns</h2><p class="hint">Probability by outcome, in multiples of today's fair value (${money(p.fvOpm)}). Today's bid is ${two(s.S0gross / Math.max(p.fvOpm, 1))}×.</p></div>
+        <div class="legend">${[['--s1', 'IPO'], ['--s2', 'Acquisition'], ['--s3', 'Still private, sold at year ' + res.horizon], ['--s4', 'Distress sale']].map(([c, t]) => `<span><i class="key" style="background:var(${c})"></i>${t}</span>`).join('')}</div>
+        <div class="chart" id="ch-out"></div>
+        <div class="tbl-wrap"><table class="mix"><thead><tr><th>Outcome if held</th><th class="n">Probability</th></tr></thead><tbody>
+          ${[['--s1', 'IPO', h.mix[1]], ['--s2', 'Acquisition', h.mix[2]], ['--s3', 'Still private, sold at year ' + res.horizon, h.mix[0]], ['--s4', 'Distress sale', h.mix[3]]].map(([c, t, v]) => `<tr><td><i class="key" style="background:var(${c})"></i>${t}</td><td class="n">${pct(v)}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="facts"><span>Proceeds in multiples of fair value:</span><span>10th percentile <b class="num">${two(h.pct.p10)}×</b></span><span>median <b class="num">${two(h.pct.p50)}×</b></span><span>90th <b class="num">${two(h.pct.p90)}×</b></span><span>mean <b class="num">${two(h.pct.mean)}×</b></span></p>
+        <p class="hint">Median time to an IPO, sale or failure, when one happens: ${fin(h.medianExit) ? h.medianExit.toFixed(1) + ' years' : 'none within the horizon'}. Proceeds below your cost basis: ${pct(h.pBelowCost)} of paths.</p></div>
+      <div class="card"><div class="ch-head"><h2>If you hold: when a later sale beats waiting</h2><p class="hint">Share of paths where the best move is a secondary sale in that year. In total ${pct(h.policy[4])} of paths end in a planned secondary sale.</p></div><div class="chart" id="ch-time"></div></div>
+      <div class="card"><div class="ch-head"><h2>Concentration test: gain from selling each share of the stake</h2><p class="hint">Certainty-equivalent family wealth versus holding everything, at risk aversion ${S.family.gamma == null ? DEF.F.gamma : S.family.gamma} and family wealth ${money(S.family.wealth == null ? DEF.F.wealth : S.family.wealth)}. The stake is ${pct(p.fvOpm / (S.family.wealth || DEF.F.wealth), 1)} of it.</p></div><div class="chart" id="ch-frac"></div></div>
+      <div class="card"><div class="ch-head"><h2>What your shares receive at each exit value</h2><p class="hint">You own ${pct(p.ownership, 2)} fully diluted. ${money(p.prefAhead)} of preferences rank ahead of you, out of a ${money(p.prefTotal)} stack.</p></div>
+        <div class="legend"><span><i class="key" style="background:var(--s1)"></i>Acquisition, through the waterfall</span><span><i class="key" style="background:var(--s2)"></i>IPO, everyone converts</span></div><div class="chart" id="ch-pay"></div></div>
+      <div class="card" id="sens"></div>
+      <div class="card"><h2>How today's equity value was set</h2>${bridgeHTML(res)}</div>
+      ${res.warnings.length ? `<div class="card"><h2>Read before relying on this</h2><ul class="notes">${res.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
+      <div class="card" id="memo-card"><div class="row"><h2>Investment-committee memo</h2><span class="spacer"></span><button class="plain" id="btn-memo">Draft with Claude</button><button class="plain" id="btn-memo-stop" hidden>Stop</button><button class="plain" id="btn-copy" hidden>Copy</button></div><p class="hint" id="memo-hint">Claude writes a one-page memo from the numbers above, on your account.</p><div class="memo" id="memo" hidden></div></div>
+      <p class="hint">${commas(res.paths)} paths in ${res.bundles} assumption sets over ${res.horizon} years. Sampling error on the value of holding: ±${pct(h.se, 1)}. Decision support, not investment advice.</p>`;
+    drawCharts(res);
+    renderSens();
+    if (!S.sample) { $('#btn-memo').disabled = true; $('#memo-hint').textContent = 'Drafting a memo needs Claude, which this view cannot reach.'; }
+  }
+
+  function why(res) {
+    const d = res.decision, s = res.sale, h = res.hold, hurdle = pct(d.hurdle);
+    // near break-even the sale size swings between runs while the money at stake is small: say so
+    const near = Math.abs(d.sr - 1) < Math.max(0.03, 2 * h.se) ? ` The bid is within ${pct(Math.abs(d.sr - 1), 1)} of fair value, so the exact size matters little: about ${money(Math.abs(s.S0net - h.vWait))} on the whole stake.` : '';
+    switch (vClass(d.verdict)) {
+      case 'v-sell': return `After fees and tax the bid nets ${money(s.S0net)}, more than the ${money(h.vWait)} holding is worth at your ${hurdle} hurdle, even in the pessimistic assumption sets.` + near;
+      case 'v-part': return (d.driver === 'concentration'
+        ? `The stake is large for the family's risk settings. Selling ${pct(d.fStar)} raises certainty-equivalent wealth by ${money(d.gainUtil)}.`
+        : `The bid nets ${money(s.S0net)}. Holding is worth ${money(d.vLo)} to ${money(d.vHi)} depending on the assumptions. Selling ${pct(d.fStar)} keeps the worst-case regret smallest.`) + near;
+      case 'v-wait': return `Today's net bid is ${pct(1 - d.sr)} below the value of holding. On ${pct(h.sellSoon)} of paths the best move is a secondary sale within three years, so keep the stake marketed.` + near;
+      case 'v-stuck': return 'Transfers are blocked, so no sale can close. Ask the company for a buyback or a tender, or find a buyer it will approve.';
+      default: return `Holding is worth ${money(h.vWait)} at your ${hurdle} hurdle against a net bid of ${money(s.S0net)}. Expected return from here is ${pct(h.irr)} a year.` + near;
+    }
+  }
+
+  function ladderHTML(res) {
+    const L = res.decision.ladder, bid = res.sale.bid;
+    const top = Math.max(L.sellAll, bid, L.fair) * 1.3 || 1, at = (x) => (100 * Math.min(1, Math.max(0, x / top))).toFixed(2);
+    const z = (a, b, c) => `<div class="z ${c}" style="left:${at(a)}%;width:${(at(b) - at(a)).toFixed(2)}%"></div>`;
+    const tick = (x, t) => `<div class="tick" style="left:${at(x)}%"></div><div class="tl" style="left:${at(x)}%">${t}<br><b class="num">${perShare(x)}</b></div>`;
+    return `<div class="lad" role="img" aria-label="Walk away below ${perShare(L.walkAway)}, fair at ${perShare(L.fair)}, sell everything above ${perShare(L.sellAll)}. Bid ${perShare(bid)}.">
+        ${z(0, L.walkAway, 'z0')}${z(L.walkAway, L.sellAll, 'z1')}${z(L.sellAll, top, 'z2')}
+        ${tick(L.walkAway, 'walk away')}${Math.abs(at(L.fair) - at(L.walkAway)) > 9 && Math.abs(at(L.sellAll) - at(L.fair)) > 9 ? tick(L.fair, 'fair') : ''}${tick(L.sellAll, 'sell all')}
+        <div class="bidm" style="left:${at(bid)}%">${res.sale.hasBid ? 'Bid' : 'Est. bid'} ${perShare(bid)}</div></div>
+      <div class="zl"><span><i style="background:var(--z-hold)"></i>Hold everything</span><span><i style="background:var(--z-part)"></i>Sell part</span><span><i style="background:var(--z-sell)"></i>Sell everything</span><span>Fair, where the price test is even: <b class="num">${perShare(L.fair)}</b></span></div>`;
+  }
+
+  function statsHTML(res) {
+    const s = res.sale, h = res.hold, p = res.position, d = res.decision;
+    const disc = s.discount;
+    return [
+      ['Fair value of your stake', money(p.fvOpm), `Waterfall at today's value: ${money(p.liq0)}`],
+      [s.hasBid ? 'Best bid for the stake' : 'Estimated bid for the stake', money(s.S0gross), `${perShare(s.bid)} a share, ${pct(Math.abs(disc))} ${disc >= 0 ? 'below' : 'above'} fair value`],
+      ['Net to the family today', money(s.S0net), (s.S0net - s.preTax > 1 ? `after fees and costs, including a ${money(s.S0net - s.preTax)} tax-loss credit` : 'after fees, costs, carry and tax') + (s.months > 0 ? `; cash in ${+s.months.toFixed(1)} months, valued today at your hurdle` : '')],
+      ['Fees and sale costs', money(s.costs), s.S0gross > 0 ? `${pct(s.costs / s.S0gross, 1)} of the price` : 'no sale price yet'],
+      ['Value of holding', money(h.vWait), `at your ${pct(d.hurdle)} hurdle, with the best resale timing`],
+      ['Expected return from holding', pct(h.irr, 1), 'a year, measured against selling today'],
+      ['Chance holding ends below the bid', pct(h.pWorse), 'in today\'s money at your hurdle'],
+      ['Preferences ahead of you', p.prefAhead > 0 ? money(p.prefAhead) : 'None', p.prefAhead > 0 ? `of a ${money(p.prefTotal)} stack` : `you rank first, in a ${money(p.prefTotal)} stack`],
+      ['Cost basis', money(p.costBasis), p.costBasis > 0 ? `bid is ${two(s.S0gross / p.costBasis)}× cost` : 'not entered'],
+    ].map(([l, v, sub]) => `<div class="stat"><span class="lab">${l}</span><span class="val">${v}</span><span class="sub">${sub}</span></div>`).join('');
+  }
+
+  // the original 100-point model's criteria, each with what the engine measured for this stake
+  function criteriaHTML(res) {
+    const d = res.decision, s = res.sale, h = res.hold, p = res.position, m = res.mark, pr = res.process;
+    const c = getPath(S.positions.get(S.current), 'company') || {}, val = (k) => (fin(c[k]) ? c[k] : DEF.C[k]);
+    const runway = c.monthlyBurn > 0 ? `runway ${Math.round((c.cash || 0) / c.monthlyBurn)} months` : 'not burning cash';
+    const credit = s.S0net - s.preTax;
+    const rows = [
+      ['Liquidity / identifiable buyer', 25, `${pct(pr.pSale)} chance a marketed sale clears the ${perShare(pr.reserve)} reserve, ${pct(pr.noOffers)} chance of no offers at all. The transfer itself closes ${pct(s.pClose)} of the time.`],
+      ['Attractiveness of exit price', 20, `Sell Ratio ${two(d.sr)}: after fees and tax the ${s.hasBid ? 'bid' : 'estimated price'} is ${pct(Math.abs(d.sr - 1))} ${d.sr >= 1 ? 'above' : 'below'} the value of holding, and ${pct(Math.abs(s.discount))} ${s.discount >= 0 ? 'below' : 'above'} fair value.`],
+      ['Remaining upside vs. downside', 20, `If held, 1 path in 10 ends below ${two(h.pct.p10)}× today's fair value, the median at ${two(h.pct.p50)}×, 1 in 10 above ${two(h.pct.p90)}×. Holding ends below today's price ${pct(h.pWorse)} of the time.`],
+      ['Holding vintage / fund maturity', 15, `Held ${fin(p.heldYears) ? p.heldYears.toFixed(1) : '–'} years. Age changes the tax (QSBS after 5 years) and the planning horizon, not the value. A need for cash goes in "Raise cash from this book".`],
+      ['Current MOIC', 10, p.costBasis > 0 ? `The price is ${two(s.S0gross / p.costBasis)}× cost. Cost counts through tax: ${credit > 1 ? `selling realizes a ${money(credit)} tax-loss credit` : 'any gain is taxed as set under Your holding'}.` : 'Cost basis not entered.'],
+      ['Revenue trajectory / business risk', 7, (c.revenue > 0 ? `Growth ${pct(val('growth'))}, cash-flow margin ${pct(fin(c.fcfMargin) ? c.fcfMargin : -12 * (c.monthlyBurn || 0) / c.revenue)}, ${runway}.` : `Pre-revenue, ${runway}.`) + ` A distress sale ends ${pct(h.mix[3])} of held paths.`],
+      ['Recency of funding round', 3, `Last priced round ${m.ageY.toFixed(1)} years ago, so today's value leans ${pct(1 - m.wRound)} on the revenue multiple and ${pct(m.wRound)} on that round.`],
+    ];
+    return `<h2>Your team's 100-point criteria, measured</h2><p class="hint">Each criterion of the original scoring model and what the engine measured for this stake. The engine weighs them inside the simulation instead of adding fixed points.</p>
+      <div class="tbl-wrap"><table><thead><tr><th>Criterion</th><th class="n">Weight</th><th>Measured for this stake</th></tr></thead><tbody>${rows.map(([a, w, t]) => `<tr><td>${a}</td><td class="n">${w}</td><td>${t}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  function bridgeHTML(res) {
+    const m = res.mark, c = getPath(S.positions.get(S.current), 'company') || {};
+    const rows = [
+      ['Headline post-money', `${m.lastClass ? esc(m.lastClass) + ' price' : 'Last price'} × fully diluted shares`, m.post],
+      ['Option-pricing backsolve', 'Equity value at which that class is worth its issue price', m.eOpm],
+      ['Rolled by comparable index', `${pct(c.indexMove || 0)} since the round, ${m.ageY.toFixed(1)} years ago`, m.eRoll],
+      ['Revenue-multiple value', 'Revenue × sector multiple adjusted for growth and margin × (1 − private discount) + cash − debt', m.eMult],
+    ].filter((r) => fin(r[2]));
+    const top = Math.max(...rows.map((r) => r[2]), m.e0) || 1;
+    const bar = (v) => `<div class="bb"><i style="width:${(100 * Math.max(0, v) / top).toFixed(1)}%"></i></div>`;
+    return `<div class="bridge">${rows.map(([t, sub, v]) => `<div class="br"><div class="bl">${t}<small class="hint">${sub}</small></div>${bar(v)}<div class="num">${money(v)}</div></div>`).join('')}
+      <div class="br final"><div class="bl">Today's equity value<small class="hint">${pct(m.wRound)} weight on the rolled round, ${pct(1 - m.wRound)} on the multiple</small></div>${bar(m.e0)}<div class="num">${money(m.e0)}</div></div></div>`;
+  }
+
+  // ---------- charts (SVG, drawn at the container's width) ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  function add(parent, tag, attrs, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    parent.appendChild(e);
+    return e;
+  }
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo || Math.abs(hi) || 1, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((k) => span / k <= n) || 10 * mag;
+    const out = [];
+    for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9 * span; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+  const colTop = (x, y0, w, h, r) => { r = Math.min(r, h, w / 2); return `M${x},${y0}V${y0 - h + r}Q${x},${y0 - h} ${x + r},${y0 - h}H${x + w - r}Q${x + w},${y0 - h} ${x + w},${y0 - h + r}V${y0}Z`; };
+  function frame(box, h) {
+    const W = Math.max(280, box.clientWidth || 600);
+    const s = document.createElementNS(NS, 'svg');
+    s.setAttribute('viewBox', `0 0 ${W} ${h}`); s.setAttribute('width', W); s.setAttribute('height', h);
+    const tip = document.createElement('div');
+    tip.className = 'tip'; tip.hidden = true;
+    box.replaceChildren(s, tip);
+    return { s, W, tip };
+  }
+  function tipAt(box, tip, x, y, title, rows) {
+    tip.innerHTML = `<div class="tt">${esc(title)}</div>${rows.map(([k, v, c]) => `<div class="tr"><span>${c ? `<i class="key" style="background:var(${c})"></i>` : ''}${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}`;
+    tip.hidden = false;
+    const bw = box.clientWidth, tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(bw - tw, x + 12)) + 'px';
+    tip.style.top = Math.max(0, y - 10) + 'px';
+  }
+  function yAxis(s, m, W, y, ticks, fmt) {
+    for (const t of ticks) {
+      add(s, 'line', { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), class: t === 0 ? 'base' : 'gl' });
+      add(s, 'text', { x: m.l - 8, y: y(t) + 4, class: 'tk', 'text-anchor': 'end' }, fmt(t));
+    }
+  }
+
+  function chartStacked(box, cats, ranges, series, h) {
+    const { s, W, tip } = frame(box, h);
+    const m = { l: 40, r: 6, t: 8, b: 30 }, ih = h - m.t - m.b, iw = W - m.l - m.r;
+    const tot = cats.map((_, i) => series.reduce((a, sr) => a + sr.v[i], 0));
+    const ticks = niceTicks(0, Math.max(...tot, 0.01), 4), ymax = ticks[ticks.length - 1];
+    const y = (v) => m.t + ih - (v / ymax) * ih;
+    yAxis(s, m, W, y, ticks, (t) => pct(t));
+    const band = iw / cats.length, bw = Math.min(24, band * 0.64), every = band < 36 ? 2 : 1;
+    cats.forEach((c, i) => {
+      const cx = m.l + band * (i + 0.5);
+      let acc = 0;
+      const segs = series.filter((sr) => sr.v[i] > 0);
+      segs.forEach((sr, j) => {
+        const bottom = y(acc) - (j ? 2 : 0), topY = y(acc + sr.v[i]);
+        acc += sr.v[i];
+        const hh = bottom - topY;
+        if (hh > 0.4) add(s, 'path', { d: j === segs.length - 1 ? colTop(cx - bw / 2, bottom, bw, hh, 4) : `M${cx - bw / 2},${bottom}V${topY}H${cx + bw / 2}V${bottom}Z`, style: `fill:var(${sr.c})` });
+      });
+      if (i % every === 0) add(s, 'text', { x: cx, y: h - m.b + 16, class: 'tk', 'text-anchor': 'middle' }, c);
+      const hit = add(s, 'rect', { x: m.l + band * i, y: m.t, width: band, height: ih, class: 'hit' });
+      hit.addEventListener('pointermove', (e) => { const b = box.getBoundingClientRect(); tipAt(box, tip, e.clientX - b.left, e.clientY - b.top, ranges[i], series.map((sr) => [sr.n, pct(sr.v[i], 1), sr.c]).concat([['Total', pct(tot[i], 1)]])); });
+      hit.addEventListener('pointerleave', () => { tip.hidden = true; });
+    });
+    add(s, 'text', { x: W - m.r, y: h - 2, class: 'tk', 'text-anchor': 'end' }, '× fair value');
+  }
+
+  function chartColumns(box, cats, vals, h, color, fmt, titleOf) {
+    const { s, W, tip } = frame(box, h);
+    const m = { l: 40, r: 6, t: 18, b: 26 }, ih = h - m.t - m.b, iw = W - m.l - m.r;
+    const ticks = niceTicks(0, Math.max(...vals, 0.01), 3), ymax = ticks[ticks.length - 1];
+    const y = (v) => m.t + ih - (v / ymax) * ih;
+    yAxis(s, m, W, y, ticks, fmt);
+    const band = iw / cats.length, bw = Math.min(24, band * 0.6), imax = vals.indexOf(Math.max(...vals));
+    vals.forEach((v, i) => {
+      const cx = m.l + band * (i + 0.5), hh = y(0) - y(v);
+      if (hh > 0.4) add(s, 'path', { d: colTop(cx - bw / 2, y(0), bw, hh, 4), style: `fill:var(${color})` });
+      if (i === imax && v > 0) add(s, 'text', { x: cx, y: y(v) - 6, class: 'lbl', 'text-anchor': 'middle' }, fmt(v));
+      add(s, 'text', { x: cx, y: h - m.b + 16, class: 'tk', 'text-anchor': 'middle' }, cats[i]);
+      const hit = add(s, 'rect', { x: m.l + band * i, y: m.t, width: band, height: ih, class: 'hit' });
+      hit.addEventListener('pointermove', (e) => { const b = box.getBoundingClientRect(); tipAt(box, tip, e.clientX - b.left, e.clientY - b.top, titleOf(i), [['Share of paths', fmt(v)]]); });
+      hit.addEventListener('pointerleave', () => { tip.hidden = true; });
+    });
+  }
+
+  function chartLines(box, xs, series, o) {
+    const h = o.h || 220, { s, W, tip } = frame(box, h);
+    const m = { l: 56, r: 12, t: 20, b: 28 }, ih = h - m.t - m.b, iw = W - m.l - m.r;
+    let ylo = Math.min(0, ...series.flatMap((sr) => sr.v)), yhi = Math.max(...series.flatMap((sr) => sr.v), 1e-9);
+    if (ylo === yhi) yhi = ylo + 1;
+    const ticks = niceTicks(ylo, yhi, 4), y0 = Math.min(ticks[0], ylo), y1 = Math.max(ticks[ticks.length - 1], yhi);
+    const x = (v) => m.l + ((v - xs[0]) / (xs[xs.length - 1] - xs[0] || 1)) * iw, y = (v) => m.t + ih - ((v - y0) / (y1 - y0)) * ih;
+    yAxis(s, m, W, y, ticks, o.yFmt);
+    for (const t of niceTicks(xs[0], xs[xs.length - 1], Math.max(2, Math.floor(iw / 90)))) add(s, 'text', { x: x(t), y: h - 8, class: 'tk', 'text-anchor': 'middle' }, o.xFmt(t));
+    for (const vl of o.vlines || []) {
+      add(s, 'line', { x1: x(vl.x), x2: x(vl.x), y1: m.t - 4, y2: m.t + ih, style: 'stroke:var(--ink-2);stroke-width:1' });
+      const right = x(vl.x) > m.l + iw * 0.7;
+      add(s, 'text', { x: x(vl.x) + (right ? -5 : 5), y: m.t + 6, class: 'lbl', 'text-anchor': right ? 'end' : 'start' }, vl.label);
+    }
+    for (const sr of series) {
+      add(s, 'path', { d: 'M' + xs.map((xv, i) => `${x(xv).toFixed(1)},${y(sr.v[i]).toFixed(1)}`).join('L'), style: `fill:none;stroke:var(${sr.c});stroke-width:2;stroke-linejoin:round;stroke-linecap:round` });
+    }
+    for (const dt of o.dots || []) {
+      add(s, 'circle', { cx: x(dt.x), cy: y(dt.y), r: 5, style: `fill:var(${dt.c});stroke:var(--card);stroke-width:2` });
+      const right = x(dt.x) > m.l + iw * 0.6;
+      add(s, 'text', { x: x(dt.x) + (right ? -9 : 9), y: y(dt.y) - 9, class: 'lbl-b', 'text-anchor': right ? 'end' : 'start' }, dt.label);
+    }
+    const cross = add(s, 'line', { y1: m.t, y2: m.t + ih, style: 'stroke:var(--axis);stroke-width:1', visibility: 'hidden' });
+    const marks = series.map((sr) => add(s, 'circle', { r: 4, style: `fill:var(${sr.c});stroke:var(--card);stroke-width:2`, visibility: 'hidden' }));
+    const hit = add(s, 'rect', { x: m.l, y: m.t, width: iw, height: ih, class: 'hit' });
+    hit.addEventListener('pointermove', (e) => {
+      const b = box.getBoundingClientRect(), px = e.clientX - b.left;
+      let i = 0, best = Infinity;
+      xs.forEach((xv, k) => { const dd = Math.abs(x(xv) - px); if (dd < best) { best = dd; i = k; } });
+      cross.setAttribute('x1', x(xs[i])); cross.setAttribute('x2', x(xs[i])); cross.setAttribute('visibility', 'visible');
+      marks.forEach((mk, k) => { mk.setAttribute('cx', x(xs[i])); mk.setAttribute('cy', y(series[k].v[i])); mk.setAttribute('visibility', 'visible'); });
+      tipAt(box, tip, px, e.clientY - b.top, o.xTitle(xs[i]), series.map((sr) => [sr.n, o.yFmt(sr.v[i]), sr.c]));
+    });
+    hit.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); marks.forEach((mk) => mk.setAttribute('visibility', 'hidden')); });
+  }
+
+  function chartTornado(box, rows, base) {
+    const narrow = (box.clientWidth || 600) < 520, lw = narrow ? 112 : 170, rh = 30, h = rows.length * rh + 44;
+    const { s, W, tip } = frame(box, h);
+    const m = { l: lw, r: 14, t: 22, b: 22 }, iw = W - m.l - m.r;
+    const vals = rows.flatMap((r) => [r.lo.sr, r.hi.sr]).concat([base.sr, 1]);
+    const vmin = Math.min(...vals) - 0.02, vmax = Math.max(...vals) + 0.02;
+    const ticks = niceTicks(vmin, vmax, Math.max(3, Math.floor(iw / 80)));
+    const a = Math.min(ticks[0], vmin), b = Math.max(ticks[ticks.length - 1], vmax), x = (v) => m.l + ((v - a) / (b - a)) * iw;
+    for (const t of ticks) { add(s, 'line', { x1: x(t), x2: x(t), y1: m.t - 6, y2: h - m.b, class: 'gl' }); add(s, 'text', { x: x(t), y: h - 6, class: 'tk', 'text-anchor': 'middle' }, t.toFixed(2)); }
+    add(s, 'line', { x1: x(1), x2: x(1), y1: m.t - 10, y2: h - m.b, style: 'stroke:var(--ink-2);stroke-width:1.5' });
+    add(s, 'text', { x: x(1), y: m.t - 12, class: 'lbl', 'text-anchor': 'middle' }, 'sell / hold line');
+    rows.forEach((r, i) => {
+      const cy = m.t + i * rh + rh / 2;
+      add(s, 'text', { x: m.l - 10, y: cy - 1, class: 'lbl', 'text-anchor': 'end' }, r.label);
+      add(s, 'text', { x: m.l - 10, y: cy + 11, class: 'tk', 'text-anchor': 'end' }, r.span);
+      for (const [v, c] of [[r.lo.sr, '--s1'], [r.hi.sr, '--s2']]) {
+        const x0 = x(base.sr), x1 = x(v), w = Math.abs(x1 - x0);
+        if (w < 0.5) continue;
+        const left = Math.min(x0, x1), rr = Math.min(4, w), outRight = x1 > x0;
+        const d = outRight ? `M${left},${cy - 6}H${left + w - rr}Q${left + w},${cy - 6} ${left + w},${cy - 6 + rr}V${cy + 6 - rr}Q${left + w},${cy + 6} ${left + w - rr},${cy + 6}H${left}Z`
+          : `M${left + w},${cy - 6}H${left + rr}Q${left},${cy - 6} ${left},${cy - 6 + rr}V${cy + 6 - rr}Q${left},${cy + 6} ${left + rr},${cy + 6}H${left + w}Z`;
+        add(s, 'path', { d, style: `fill:var(${c})` });
+      }
+      const hit = add(s, 'rect', { x: 0, y: cy - rh / 2, width: W, height: rh, class: 'hit' });
+      hit.addEventListener('pointermove', (e) => { const bb = box.getBoundingClientRect(); tipAt(box, tip, e.clientX - bb.left, e.clientY - bb.top, `${r.label} (${r.span})`, [['Input lower: Sell Ratio', two(r.lo.sr), '--s1'], ['   sell', pct(r.lo.f)], ['Input higher: Sell Ratio', two(r.hi.sr), '--s2'], ['   sell', pct(r.hi.f)]]); });
+      hit.addEventListener('pointerleave', () => { tip.hidden = true; });
+    });
+    add(s, 'line', { x1: x(base.sr), x2: x(base.sr), y1: m.t - 4, y2: h - m.b, style: 'stroke:var(--ink);stroke-width:1' });
+  }
+
+  let lastDrawn = null;
+  function drawCharts(res) {
+    lastDrawn = res;
+    const h = res.hold, d = res.decision;
+    const cats = h.hist.map((b) => (b.lo === 0 ? '<0.1' : b.hi === Infinity || b.hi == null ? '10+' : String(b.lo)));
+    const ranges = h.hist.map((b) => (b.lo === 0 ? 'Below 0.1× fair value' : b.hi === Infinity || b.hi == null ? '10× fair value or more' : `${b.lo}× to ${b.hi}× fair value`));
+    chartStacked($('#ch-out'), cats, ranges, [
+      { n: 'IPO', c: '--s1', v: h.hist.map((b) => b.byType[1]) }, { n: 'Acquisition', c: '--s2', v: h.hist.map((b) => b.byType[2]) },
+      { n: 'Sold at horizon', c: '--s3', v: h.hist.map((b) => b.byType[0]) }, { n: 'Distress', c: '--s4', v: h.hist.map((b) => b.byType[3]) }], 230);
+    chartColumns($('#ch-time'), h.saleYears.map((_, i) => 'Yr ' + (i + 1)), h.saleYears, 170, '--s1', (v) => pct(v), (i) => `Year ${i + 1}`);
+    chartLines($('#ch-frac'), d.fs, [{ n: 'Gain versus holding', c: '--s1', v: d.ceGain }], {
+      h: 210, xFmt: (v) => pct(v), xTitle: (v) => `Sell ${pct(v)} now`, yFmt: (v) => money(v),
+      vlines: d.fHedge > 0 ? [{ x: d.fHedge, label: `price test: ${pct(d.fHedge)}` }] : [],
+      dots: [{ x: d.fUtil, y: d.ceGain[Math.round(d.fUtil * 20)], c: '--s1', label: d.fUtil > 0 ? `best: sell ${pct(d.fUtil)}` : 'best: keep it all' }],
+    });
+    const wf = res.waterfall;
+    chartLines($('#ch-pay'), wf.map((r) => r[0]), [{ n: 'Acquisition', c: '--s1', v: wf.map((r) => r[1]) }, { n: 'IPO', c: '--s2', v: wf.map((r) => r[2]) }], {
+      h: 230, xFmt: money, xTitle: (v) => `Exit equity value ${money(v)}`, yFmt: money,
+      vlines: [{ x: res.mark.e0, label: `today ${money(res.mark.e0)}` }],
+    });
+  }
+  let lastW = 0;
+  const ro = new ResizeObserver(() => {
+    const w = $('#results').clientWidth;
+    if (!w || w === lastW) return;   // redraw on width changes only
+    lastW = w;
+    clearTimeout(S.timers.get('rs'));
+    S.timers.set('rs', setTimeout(() => { if (lastDrawn && S.view === 'position' && $('#ch-out')) { drawCharts(lastDrawn); renderSens(); } }, 150));
+  });
+  ro.observe($('#results'));
+
+  // ---------- sensitivity ----------
+  function renderSens() {
+    const el = $('#sens'), t = S.tornado.get(S.current), hcur = hash(JSON.stringify(inputFor(S.current)));
+    const head = '<div class="ch-head"><h2>What moves the answer, and where each assumption comes from</h2><p class="hint">Each assumption pushed lower (blue) and higher (orange), the engine rerun at 4,000 paths. Bars show the new Sell Ratio; hover for the new sale size. Engine defaults are placeholders, not data.</p></div>';
+    if (t && t.running) { el.innerHTML = head + `<div class="prog"><i style="width:${Math.round(100 * (t.p || 0))}%"></i></div><p class="hint">Running ${Math.round(100 * (t.p || 0))}%</p>`; return; }
+    if (t && t.error) { el.innerHTML = head + `<p>${esc(t.error)}</p>`; return; }
+    if (t && t.res && t.hash === hcur) {
+      const rows = t.res.rows.slice().sort((a, b) => Math.abs(b.hi.sr - b.lo.sr) - Math.abs(a.hi.sr - a.lo.sr));
+      const soft = rows.slice(0, 5).filter((r) => r.src === 'default');
+      el.innerHTML = head + `<p>${soft.length ? `${soft.length} of the 5 assumptions that move this answer most are engine defaults, not your data: ${soft.map((r) => r.label.toLowerCase()).join(', ')}. Replace those first, with market data or the bank's feedback.` : 'The 5 assumptions that move this answer most all come from your data or family settings.'}</p>` +
+        '<div class="legend"><span><i class="key" style="background:var(--s1)"></i>Input lower</span><span><i class="key" style="background:var(--s2)"></i>Input higher</span></div><div class="chart" id="ch-tor"></div>' + registerHTML(rows);
+      chartTornado($('#ch-tor'), rows.filter((r) => Math.abs(r.hi.sr - r.lo.sr) > 1e-9), t.res.base);
+      return;
+    }
+    el.innerHTML = head + `<div class="row"><button class="plain" id="btn-sens">Test the assumptions</button><span class="hint">${t && t.res ? 'Inputs changed since the last test.' : 'Takes about 15 seconds.'}</span></div>`;
+  }
+  const SRC = { input: 'Your data', family: 'Family setting', default: 'Engine default' };
+  const shownAs = (r) => (r.kind === 'pct' ? pct(r.value, 1) : r.kind === 'x' ? r.value.toFixed(1) + '×' : r.kind === 'money' ? money(r.value) : r.kind === 'perShare' ? perShare(r.value)
+    : r.kind === 'window' ? (r.value < 0 ? 'Shut' : r.value > 0 ? 'Open' : 'Neutral') : String(+r.value.toFixed(2)));
+  function registerHTML(rows) {
+    return `<div class="tbl-wrap"><table><thead><tr><th>Assumption</th><th class="n">Used</th><th>Source</th><th class="n">Tested</th><th class="n">Sell Ratio, lower → higher</th><th class="n">Chance of a sale, lower → higher</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="n">${shownAs(r)}</td><td><span class="chip${r.src === 'default' ? ' warn' : ''}">${SRC[r.src]}</span></td><td class="n">${esc(r.span)}</td><td class="n">${two(r.lo.sr)} → ${two(r.hi.sr)}</td><td class="n">${pct(r.lo.pSale)} → ${pct(r.hi.pSale)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+  function runSens() {
+    const id = S.current, input = inputFor(id), h = hash(JSON.stringify(input));
+    S.tornado.set(id, { running: true, p: 0, hash: h });
+    renderSens();
+    Engine.call('tornado', input, (p) => { const t = S.tornado.get(id); if (t && t.running) { t.p = p; if (id === S.current) renderSens(); } })
+      .then((res) => S.tornado.set(id, { res, hash: h }))
+      .catch((e) => S.tornado.set(id, { error: e.message || String(e), hash: h }))
+      .finally(() => { if (id === S.current && S.view === 'position') renderSens(); });
+  }
+
+  // ---------- documents -> fields, through Claude ----------
+  const LIBS = {
+    pdf: ['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'],
+    xlsx: ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'],
+    docx: ['https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'],
+  };
+  const loaded = {};
+  function loadLib(k) {
+    if (!loaded[k]) loaded[k] = LIBS[k].reduce((p, src) => p.then(() => new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load the reader for this file type.'));
+      document.head.appendChild(sc);
+    })), Promise.resolve());
+    return loaded[k];
+  }
+  let files = [];
+  function renderFiles() {
+    $('#filelist').innerHTML = files.map((f, i) => `<li class="chip">${esc(f.name)} <button class="icon" data-del-file="${i}" aria-label="Remove ${esc(f.name)}">✕</button></li>`).join('');
+  }
+  function renderImportState() {
+    const btn = $('#btn-extract');
+    if (!btn) return;
+    btn.disabled = !S.sample || S.canWrite === false;
+    $('#extract-status').textContent = !S.sample ? 'Reading documents needs Claude, which this view cannot reach. Enter the numbers below instead.' : '';
+  }
+  async function fileText(f, images, maxImages) {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (/^image\//.test(f.type)) {
+      if (images.length >= maxImages) return `[image ${f.name} could not be sent]`;
+      images.push(f);
+      return `[image attached: ${f.name}]`;
+    }
+    if (ext === 'pdf') {
+      await loadLib('pdf');
+      const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
+      let text = '';
+      for (let i = 1; i <= Math.min(doc.numPages, 80); i++) text += (await (await doc.getPage(i)).getTextContent()).items.map((t) => t.str).join(' ') + '\n';
+      if (text.trim().length < 200 && maxImages > images.length) {   // scanned: send page images instead
+        for (let i = 1; i <= Math.min(doc.numPages, maxImages - images.length); i++) {
+          const page = await doc.getPage(i), vp = page.getViewport({ scale: 1.6 }), cv = document.createElement('canvas');
+          cv.width = vp.width; cv.height = vp.height;
+          await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+          images.push(await new Promise((r) => cv.toBlob(r, 'image/png')));
+        }
+        return `[scanned PDF ${f.name}: pages attached as images]`;
+      }
+      return text;
+    }
+    if (ext === 'xlsx' || ext === 'xls') {
+      await loadLib('xlsx');
+      const wb = window.XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      return wb.SheetNames.map((n) => `# sheet ${n}\n` + window.XLSX.utils.sheet_to_csv(wb.Sheets[n])).join('\n');
+    }
+    if (ext === 'docx') { await loadLib('docx'); return (await window.mammoth.extractRawText({ arrayBuffer: await f.arrayBuffer() })).value; }
+    return await f.text();
+  }
+  const EXTRACT = [
+    ['company.name', 'Company', 'text'], ['company.sector', 'Sector', 'text'], ['company.revenue', 'Revenue run-rate', 'money'],
+    ['company.growth', 'Revenue growth', 'pct'], ['company.fcfMargin', 'Free-cash-flow margin', 'pct'], ['company.monthlyBurn', 'Net burn per month', 'money'],
+    ['company.cash', 'Cash on hand', 'money'], ['company.debt', 'Debt', 'money'], ['company.lastRoundDate', 'Last priced round', 'date'],
+    ['holding.costBasis', 'Cost basis', 'money'], ['holding.acquired', 'Acquired on', 'date'], ['holding.qsbs', 'QSBS-eligible', 'bool'],
+    ['market.rofr', 'Right of first refusal', 'bool'], ['market.consent', 'Board consent needed', 'bool'],
+    ['bank.fee', 'Bank fee, for every stake', 'pct'], ['bank.minFee', 'Bank minimum fee, whole engagement', 'money'],
+    ['bank.upfront', 'Retainer and costs due even if nothing sells', 'money'], ['bank.monthsToClose', 'Months until closing', 'num'],
+  ];
+  // engagement-letter terms apply to the whole family, not to the open position
+  const BANK_KEY = { 'bank.fee': 'bankFee', 'bank.minFee': 'bankMinFee', 'bank.upfront': 'bankUpfront', 'bank.monthsToClose': 'bankMonths' };
+  const PROMPT = `You are extracting facts for a venture-capital secondary-sale model. Read the material below: investor updates, cap tables, term sheets, financial statements, broker or buyer emails, bank engagement letters. Reply with only one JSON object in exactly this shape. Use null for anything the material does not state. Never estimate or invent a number.
+
+Units: plain US dollars as numbers (48000000, not "48M"); rates as decimals (35% is 0.35; a burning company's free-cash-flow margin is negative); dates as YYYY-MM-DD; share counts as numbers.
+
+{
+ "company": {"name": string, "sector": string, "revenue": number (current ARR or annualized revenue), "growth": number (year-over-year revenue growth), "fcfMargin": number (free cash flow divided by revenue), "monthlyBurn": number (net cash burn per month, positive), "cash": number, "debt": number, "lastRoundDate": string},
+ "cap": [{"name": string, "shares": number (outstanding in this class; for common include the option pool), "oip": number (original issue price per share, 0 for common), "prefMult": number (liquidation preference multiple, usually 1), "participating": boolean, "capMult": number (participation cap as a multiple of issue price, 0 if none), "rank": integer (1 is paid first, equal numbers are pari passu, common is 9), "ad": "wa" | "fr" | "none" (broad-based weighted average, full ratchet, none), "common": boolean, "ours": number (shares of this class that WE hold, 0 if none)}],
+ "holding": {"costBasis": number (total we paid), "acquired": string, "qsbs": boolean},
+ "market": {"bids": [{"price": number (per share), "source": string, "date": string}], "rofr": boolean, "consent": boolean},
+ "bank": {"fee": number (the bank's or broker's success fee as a decimal of the sale price), "minFee": number (minimum fee in dollars for the whole engagement), "upfront": number (retainer and any other fees due even if nothing sells, in total dollars), "monthsToClose": number (expected months from engagement to closing, only if stated)},
+ "evidence": {"<field path such as company.revenue, cap, market.bids>": "short verbatim quote, under 20 words"},
+ "notes": "one or two sentences on anything ambiguous, such as which share class a bid refers to"
+}
+
+"We" are the investor who supplied the material. Leave "cap" null unless the material lists share classes.
+
+--- MATERIAL ---
+`;
+  let extractCtl = null;
+  async function extract() {
+    if (!S.sample) return;
+    const paste = $('#paste').value.trim();
+    if (!files.length && !paste) { $('#extract-status').textContent = 'Add a file or paste some text first.'; return; }
+    const status = (t) => { $('#extract-status').textContent = t; };
+    const lim = S.imagesOK ? ((await S.sample.limits().catch(() => null)) || {}).images : null, maxImages = lim ? lim.maxCount : 0;
+    const images = [];
+    let text = '';
+    try {
+      for (const f of files) { status('Reading ' + f.name); text += `\n[file: ${f.name}]\n` + (await fileText(f, images, maxImages)) + '\n'; }
+    } catch (e) { status(e.message || 'Could not read a file. Try pasting its text instead.'); return; }
+    if (paste) text += '\n[pasted text]\n' + paste + '\n';
+    if (text.length > 180000) text = text.slice(0, 180000) + '\n[truncated]';
+    extractCtl = new AbortController();
+    $('#btn-extract').disabled = true; $('#btn-extract-stop').hidden = false;
+    status('Claude is reading the material. This can take a minute.');
+    try {
+      const out = await S.sample.json(PROMPT + text, Object.assign({ signal: extractCtl.signal }, images.length ? { images } : {}));
+      renderReview(out || {});
+      status('Check the values, then apply the ones you trust.');
+    } catch (e) {
+      const msg = { cancelled: 'Stopped.', not_granted: 'Claude was not allowed for this page.', rate_limited: 'Too many requests. Try again in a few minutes.', invalid_json: 'Claude\'s reply could not be read. Try again, or paste less text.', prompt_too_large: 'Too much text. Remove a file or paste a shorter excerpt.', refused: 'Claude declined this material.', images_unavailable: 'Images cannot be sent from this view. Paste the text instead.' }[e && e.code];
+      status(msg || 'Something went wrong reading the material. Try again.');
+    } finally {
+      $('#btn-extract').disabled = false; $('#btn-extract-stop').hidden = true;
+    }
+  }
+  let pendingReview = null;
+  function renderReview(out) {
+    const ev = out.evidence || {}, items = [];
+    for (const [path, label, kind] of EXTRACT) {
+      let v = getPath(out, path);
+      if (v == null || v === '') continue;
+      if (kind === 'money' || kind === 'pct' || kind === 'num') { v = typeof v === 'number' ? v : parseNum(v); if (!fin(v)) continue; }
+      if (kind === 'bool' && typeof v !== 'boolean') continue;
+      if ((kind === 'text' || kind === 'date') && typeof v !== 'string') continue;
+      const shownV = kind === 'money' ? money(v) : kind === 'pct' ? pct(v, 1) : kind === 'bool' ? (v ? 'Yes' : 'No') : v;
+      items.push({ path, label, v, shown: shownV, q: ev[path] });
+    }
+    const cap = Array.isArray(out.cap) ? out.cap.filter((r) => r && fin(+r.shares) && +r.shares > 0).map((r) => ({
+      name: String(r.name || 'Class'), shares: +r.shares, oip: fin(+r.oip) ? +r.oip : 0, prefMult: fin(+r.prefMult) ? +r.prefMult : r.common ? 0 : 1,
+      participating: !!r.participating, capMult: fin(+r.capMult) ? +r.capMult : 0, rank: fin(+r.rank) ? +r.rank : r.common ? 9 : 1,
+      ad: ['wa', 'fr', 'none'].includes(r.ad) ? r.ad : r.common ? 'none' : 'wa', common: !!r.common, ours: fin(+r.ours) ? +r.ours : 0 })) : [];
+    if (cap.length) items.push({ path: 'cap', label: `Cap table, ${cap.length} classes`, v: cap, shown: cap.map((r) => `${r.name}: ${commas(r.shares)} sh${r.common ? '' : ' @ $' + r.oip}${r.ours ? ', yours ' + commas(r.ours) : ''}`).join(' · '), q: ev.cap });
+    const bids = Array.isArray(getPath(out, 'market.bids')) ? out.market.bids.filter((b) => b && fin(+b.price) && +b.price > 0).map((b) => ({ price: +b.price, source: b.source ? String(b.source) : '', date: b.date ? String(b.date) : '' })) : [];
+    if (bids.length) items.push({ path: 'market.bids', label: `Bids, ${bids.length}`, v: bids, shown: bids.map((b) => `$${b.price}/sh${b.source ? ' from ' + b.source : ''}`).join(' · '), q: ev['market.bids'] });
+    pendingReview = items;
+    $('#review').innerHTML = items.length ? items.map((it, i) => `<label class="rv" for="rv${i}"><input type="checkbox" id="rv${i}" data-rv="${i}" checked><span><b>${esc(it.label)}</b> <span class="vv">${esc(it.shown)}</span></span>${it.q ? `<span class="q">“${esc(it.q)}”</span>` : ''}</label>`).join('') +
+      (out.notes ? `<p class="hint">${esc(out.notes)}</p>` : '') + '<div class="row"><button class="primary" id="btn-apply">Apply selected</button><button class="plain" id="btn-discard">Discard</button></div>'
+      : `<p class="hint">No usable numbers found.${out.notes ? ' ' + esc(out.notes) : ''}</p>`;
+  }
+  function applyReview() {
+    const d = S.positions.get(S.current);
+    if (!d || !pendingReview) return;
+    let fam = false;
+    for (const box of $$('[data-rv]', $('#review'))) {
+      if (!box.checked) continue;
+      const it = pendingReview[+box.dataset.rv];
+      if (it.path === 'cap') d.cap = clone(it.v);
+      else if (it.path === 'market.bids') { d.market = d.market || {}; d.market.bids = (d.market.bids || []).concat(clone(it.v)); }
+      else if (BANK_KEY[it.path]) { S.family[BANK_KEY[it.path]] = it.v; fam = true; }
+      else setPath(d, it.path, it.v);
+    }
+    if (fam) familyChanged();
+    pendingReview = null; files = []; renderFiles();
+    $('#review').innerHTML = ''; $('#paste').value = ''; $('#extract-status').textContent = 'Applied. The model is rerunning.';
+    renderInputs(); changed();
+  }
+
+  // ---------- memo ----------
+  let memoCtl = null;
+  async function draftMemo() {
+    const r = S.results.get(S.current);
+    if (!S.sample || !r || !r.res) return;
+    const res = r.res, d = S.positions.get(S.current), m = $('#memo');
+    const facts = {
+      company: d.company, holding: { classes: res.position.classes.filter((c) => c.ours > 0).map((c) => c.name), shares: res.position.shares, ownership: res.position.ownership, costBasis: res.position.costBasis, qsbs: getPath(d, 'holding.qsbs') || false },
+      market: { bids: getPath(d, 'market.bids') || [], rofr: !!getPath(d, 'market.rofr'), consent: !!getPath(d, 'market.consent'), closeProbability: res.sale.pClose, feesAndSaleCosts: res.sale.costs, monthsUntilCash: res.sale.months,
+        marketedSale: { chanceOfSaleAtReserve: res.process.pSale, chanceOfNoOffers: res.process.noOffers, reservePerShare: res.process.reserve, likelyPricePerShareIfSold: res.process.price, expectedGainOverHolding: res.process.gain, seriousBuyersAssumed: res.process.buyers } },
+      model: { verdict: res.decision.verdict, sellFraction: res.decision.fStar, sellRatio: res.decision.sr, sellRatioP10P90: [res.decision.srBand[0], res.decision.srBand[2]],
+        assumptionSetsAgreeing: `${Math.round(res.decision.agree * res.bundles)} of ${res.bundles}`, hurdle: res.decision.hurdle, priceTestFraction: res.decision.fHedge, concentrationTestFraction: res.decision.fUtil,
+        bidGross: res.sale.S0gross, bidNetAfterFeesAndTax: res.sale.S0net, discountToFairValue: res.sale.discount, fairValueOPM: res.position.fvOpm, waterfallValueToday: res.position.liq0,
+        valueOfHolding: res.hold.vWait, expectedReturnFromHolding: res.hold.irr, chanceHoldingEndsBelowBid: res.hold.pWorse,
+        priceLadderPerShare: res.decision.ladder, outcomeMixIfHeld: { ipo: res.hold.mix[1], acquisition: res.hold.mix[2], stillPrivateAtHorizon: res.hold.mix[0], distress: res.hold.mix[3] },
+        preferencesAhead: res.position.prefAhead, todaysEquityValue: res.mark.e0, lastRoundPostMoney: res.mark.post, stakeShareOfFamilyWealth: res.position.fvOpm / (S.family.wealth || DEF.F.wealth), warnings: res.warnings },
+    };
+    const prompt = `Write a short investment-committee memo for a family office deciding whether to sell its stake in ${d.company && d.company.name ? d.company.name : 'this company'} on the secondary market. Use only the facts and model outputs below and add no numbers that are not there. Round sensibly. Plain text, no markdown symbols. Use these headings, each on its own line: Recommendation, Why, What could prove this wrong, How to execute, What to watch. Under 350 words, written plainly for investment professionals. End with one line noting this is decision support, not investment advice.
+
+Facts and model outputs (JSON, money in US dollars, rates as decimals):
+${JSON.stringify(facts)}`;
+    memoCtl = new AbortController();
+    m.hidden = false; m.textContent = 'Thinking…';
+    $('#btn-memo').disabled = true; $('#btn-memo-stop').hidden = false; $('#btn-copy').hidden = true;
+    try {
+      await S.sample(prompt, { signal: memoCtl.signal, cache: false, onText: ({ text }) => { m.textContent = text; } });
+      $('#btn-copy').hidden = false;
+    } catch (e) {
+      m.textContent = e && e.text ? e.text : '';
+      if (!(e && e.code === 'cancelled')) $('#memo-hint').textContent = { not_granted: 'Claude was not allowed for this page.', rate_limited: 'Too many requests. Try again in a few minutes.' }[e && e.code] || 'The memo was interrupted. Try again.';
+      if (!m.textContent) m.hidden = true; else $('#btn-copy').hidden = false;
+    } finally { $('#btn-memo').disabled = false; $('#btn-memo-stop').hidden = true; }
+  }
+
+  // ---------- family ----------
+  function renderFamily() {
+    $('#f-family').innerHTML = FAMILY.map((f) => fieldHTML(f, S.family, FAMILY_DEF)).join('');
+    $('#f-bank').innerHTML = BANK.map((f) => fieldHTML(f, S.family, FAMILY_DEF)).join('');
+    if (S.canWrite === false) for (const el of $$('#f-family input, #f-family select, #f-bank input')) el.disabled = true;
+  }
+
+  // ---------- events ----------
+  $$('.tabs button').forEach((b) => b.addEventListener('click', () => show(b.dataset.view)));
+  function addPosition() {
+    const id = 'p-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    S.positions.set(id, TEMPLATE());
+    scheduleSave(id);
+    open(id);
+    $('#imp').open = true;
+  }
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('button, tr.pick');
+    if (!t) return;
+    if (t.id === 'btn-add' || t.id === 'btn-add2') addPosition();
+    else if (t.matches('tr.pick')) open(t.dataset.id);
+    else if (t.id === 'btn-back') show('portfolio');
+    else if (t.id === 'btn-runall') { S.results.clear(); queued.clear(); for (const id of S.positions.keys()) want(id, 1); renderPortfolio(); }
+    else if (t.id === 'btn-run') { S.results.delete(S.current); queued.delete(S.current); want(S.current, 2); renderResults(); }
+    else if (t.id === 'btn-del') {
+      if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirm delete'; setTimeout(() => { if (t.isConnected) { t.dataset.confirm = ''; t.textContent = 'Delete position'; } }, 4000); return; }
+      const id = S.current;
+      S.positions.delete(id); S.results.delete(id); S.dirty.delete(id); clearTimeout(S.timers.get(id));
+      if (S.db) S.db.collection('positions').doc(id).delete().catch(() => setStore('error')); else saveLocal();
+      S.current = null; t.dataset.confirm = ''; t.textContent = 'Delete position';
+      show('portfolio');
+    }
+    else if (t.id === 'btn-clear-ex') {
+      for (const id of [...S.positions.keys()]) if (S.positions.get(id).example) { S.positions.delete(id); S.results.delete(id); if (S.db) S.db.collection('positions').doc(id).delete().catch(() => setStore('error')); }
+      saveLocal(); renderPortfolio();
+    }
+    else if (t.id === 'cap-add') { const d = S.positions.get(S.current); d.cap = d.cap || []; d.cap.push({ name: 'Series ' + String.fromCharCode(64 + d.cap.length), shares: null, oip: null, prefMult: 1, participating: false, capMult: 0, rank: 1, ad: 'wa', common: false, ours: 0 }); renderCap(); changed(); }
+    else if (t.dataset.delCap != null) { S.positions.get(S.current).cap.splice(+t.dataset.delCap, 1); renderCap(); changed(); }
+    else if (t.id === 'bid-add') { const d = S.positions.get(S.current); d.market = d.market || {}; (d.market.bids = d.market.bids || []).push({ price: null, source: '', date: new Date().toISOString().slice(0, 10) }); renderBids(); changed(); }
+    else if (t.dataset.delBid != null) { S.positions.get(S.current).market.bids.splice(+t.dataset.delBid, 1); renderBids(); changed(); }
+    else if (t.dataset.delFile != null) { files.splice(+t.dataset.delFile, 1); renderFiles(); }
+    else if (t.id === 'btn-extract') extract();
+    else if (t.id === 'btn-extract-stop') { if (extractCtl) extractCtl.abort(); }
+    else if (t.id === 'btn-apply') applyReview();
+    else if (t.id === 'btn-discard') { pendingReview = null; $('#review').innerHTML = ''; $('#extract-status').textContent = ''; }
+    else if (t.id === 'btn-sens') runSens();
+    else if (t.id === 'btn-memo') draftMemo();
+    else if (t.id === 'btn-memo-stop') { if (memoCtl) memoCtl.abort(); }
+    else if (t.id === 'btn-copy') {
+      const txt = $('#memo').textContent;
+      const sel = () => { const r = document.createRange(); r.selectNodeContents($('#memo')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('#memo-hint').textContent = 'Selected. Press Ctrl+C or Cmd+C to copy.'; };
+      try { navigator.clipboard.writeText(txt).then(() => { $('#memo-hint').textContent = 'Copied.'; }, sel); } catch (err) { sel(); }
+    }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('tr.pick')) open(e.target.dataset.id); });
+  $('#pos-pick').addEventListener('change', (e) => { S.current = e.target.value; renderPosition(); });
+  $('#need').addEventListener('change', (e) => { const n = parseNum(e.target.value); if (fin(n)) e.target.value = commas(n); renderPlan(); });
+  bindFields($('#f-company'), () => S.positions.get(S.current), changed);
+  bindFields($('#f-company-adv'), () => S.positions.get(S.current), changed);
+  bindFields($('#f-holding'), () => S.positions.get(S.current), changed);
+  bindFields($('#f-market'), () => S.positions.get(S.current), changed);
+  const familyChanged = () => { scheduleSave('family'); for (const id of S.positions.keys()) want(id, 1); };
+  bindFields($('#f-family'), () => S.family, familyChanged);
+  bindFields($('#f-bank'), () => S.family, familyChanged);
+  $('#cap').addEventListener('change', (e) => {
+    const el = e.target, i = el.dataset.row, k = el.dataset.key;
+    if (i == null) return;
+    const kind = el.dataset.kind;
+    let v = kind === 'bool' ? el.checked : kind === 'ad' || kind === 'text' ? el.value : parseNum(el.value);
+    if (Number.isNaN(v)) { el.setAttribute('aria-invalid', 'true'); return; }
+    el.removeAttribute('aria-invalid');
+    S.positions.get(S.current).cap[+i][k] = v;
+    if (kind === 'int' && fin(v)) el.value = commas(v);
+    changed();
+  });
+  $('#bids').addEventListener('change', (e) => {
+    const el = e.target, i = el.dataset.bid;
+    if (i == null) return;
+    let v = el.dataset.kind === 'num' ? parseNum(el.value) : el.value.trim();
+    if (Number.isNaN(v)) { el.setAttribute('aria-invalid', 'true'); return; }
+    el.removeAttribute('aria-invalid');
+    S.positions.get(S.current).market.bids[+i][el.dataset.key] = v;
+    changed();
+  });
+  $('#files').addEventListener('change', (e) => { files = files.concat(Array.from(e.target.files || [])); e.target.value = ''; renderFiles(); });
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => { files = files.concat(Array.from((e.dataTransfer && e.dataTransfer.files) || [])); renderFiles(); });
+
+  renderPortfolio();
+  initStore();
+})();
+</script>

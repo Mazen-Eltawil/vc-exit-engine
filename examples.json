@@ -1,0 +1,57 @@
+{
+  "family": {
+    "wealth": 250000000, "gamma": 3, "ambiguity": 1, "hurdle": 0.15, "riskFree": 0.04,
+    "portfolioReturn": 0.07, "marketVol": 0.16, "equityWeight": 0.7, "taxFed": 0.238, "taxState": 0,
+    "stateConformsQsbs": true, "qsbsAllowed": true, "lossesUsable": true, "horizon": 8, "window": 0
+  },
+  "positions": {
+    "example-northwind": {
+      "example": true,
+      "company": {
+        "name": "Example: Northwind Analytics", "sector": "B2B software", "revenue": 48000000, "growth": 0.38,
+        "fcfMargin": -0.18, "monthlyBurn": 720000, "cash": 62000000, "debt": 0, "lastRoundDate": "2021-11-15",
+        "indexMove": -0.3, "compMultiple": 7, "privateDiscount": 0.2
+      },
+      "cap": [
+        { "name": "Common + options", "shares": 40000000, "oip": 0, "prefMult": 0, "participating": false, "capMult": 0, "rank": 9, "ad": "none", "common": true, "ours": 0 },
+        { "name": "Seed", "shares": 8000000, "oip": 0.5, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 0 },
+        { "name": "Series A", "shares": 12000000, "oip": 1.8, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 0 },
+        { "name": "Series B", "shares": 10000000, "oip": 5.2, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 1200000 },
+        { "name": "Series C", "shares": 9000000, "oip": 14, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 0 }
+      ],
+      "holding": { "costBasis": 6240000, "acquired": "2019-04-10", "qsbs": true, "carry": 0 },
+      "market": { "bids": [{ "price": 3.4, "source": "Broker indication", "date": "2026-10-01" }], "fee": 0.03, "rofr": true, "consent": false, "blocked": false, "noBidDiscount": 0.15 }
+    },
+    "example-tidewater": {
+      "example": true,
+      "company": {
+        "name": "Example: Tidewater Health", "sector": "Healthcare software", "revenue": 14000000, "growth": 0.06,
+        "fcfMargin": -0.55, "monthlyBurn": 640000, "cash": 9000000, "debt": 4000000, "lastRoundDate": "2021-06-01",
+        "indexMove": -0.35, "compMultiple": 4.5, "privateDiscount": 0.2
+      },
+      "cap": [
+        { "name": "Common + options", "shares": 30000000, "oip": 0, "prefMult": 0, "participating": false, "capMult": 0, "rank": 9, "ad": "none", "common": true, "ours": 0 },
+        { "name": "Series A", "shares": 15000000, "oip": 1, "prefMult": 1, "participating": false, "capMult": 0, "rank": 3, "ad": "wa", "common": false, "ours": 2500000 },
+        { "name": "Series B", "shares": 12000000, "oip": 3.5, "prefMult": 1, "participating": false, "capMult": 0, "rank": 2, "ad": "wa", "common": false, "ours": 0 },
+        { "name": "Series C", "shares": 8000000, "oip": 9, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 0 }
+      ],
+      "holding": { "costBasis": 2500000, "acquired": "2018-09-01", "qsbs": true, "carry": 0 },
+      "market": { "bids": [{ "price": 0.35, "source": "Secondary fund email", "date": "2026-09-20" }], "fee": 0.03, "rofr": true, "consent": true, "blocked": false }
+    },
+    "example-quantum-ridge": {
+      "example": true,
+      "company": {
+        "name": "Example: Quantum Ridge Materials", "sector": "Deep tech", "revenue": 0, "growth": 0, "monthlyBurn": 1600000,
+        "cash": 45000000, "debt": 0, "lastRoundDate": "2023-03-01", "indexMove": 0.1, "valueGrowth": 0.12, "vol": 0.9
+      },
+      "cap": [
+        { "name": "Common + options", "shares": 25000000, "oip": 0, "prefMult": 0, "participating": false, "capMult": 0, "rank": 9, "ad": "none", "common": true, "ours": 0 },
+        { "name": "Seed", "shares": 10000000, "oip": 0.8, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 0 },
+        { "name": "Series A", "shares": 14000000, "oip": 2.5, "prefMult": 1, "participating": false, "capMult": 0, "rank": 1, "ad": "wa", "common": false, "ours": 3000000 },
+        { "name": "Series B", "shares": 11000000, "oip": 6, "prefMult": 1, "participating": true, "capMult": 3, "rank": 1, "ad": "wa", "common": false, "ours": 0 }
+      ],
+      "holding": { "costBasis": 7500000, "acquired": "2019-01-15", "qsbs": true, "carry": 0.1 },
+      "market": { "bids": [], "fee": 0.04, "rofr": true, "consent": true, "blocked": false, "noBidDiscount": 0.35 }
+    }
+  }
+}
